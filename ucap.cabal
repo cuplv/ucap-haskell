@@ -9,8 +9,10 @@ maintainer:         nicklewchenko92@gmail.com
 
 library
     exposed-modules:  Data.UCap
+                    , Data.UCap.Bound
                     , Data.UCap.Classes
                     , Data.UCap.Const
+                    , Data.UCap.Counter
                     , Data.UCap.InfSet
     build-depends:    base ^>=4.14.3.0, containers, aeson
     hs-source-dirs:   src

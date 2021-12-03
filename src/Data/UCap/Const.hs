@@ -44,16 +44,6 @@ instance (EffectDom e s) => Semigroup (ConstE e s) where
 instance (EffectDom e s) => Monoid (ConstE e s) where
   mempty = ModifyE mempty
 
--- instance (Eq s, EffectSlice e, EffectDom e s) => EffectSlice (ConstE e s) where
---   effectSlice (ConstE s1) (ConstE s2) | s1 == s2 = Just (ConstE s1,idE)
---   effectSlice (ModifyE e1) (ModifyE e2) = case effectSlice e1 e2 of
---     Just (e1',e2') -> Just (ModifyE e1', ModifyE e2')
---     Nothing -> Nothing
---   effectSlice _ _ = Nothing
---   effectMerge (ConstE s1) (ConstE s2) | s1 == s2 = Just (ConstE s1)
---   effectMerge (ModifyE e1) (ModifyE e2) = ModifyE <$> effectMerge e1 e2
---   effectMerge _ _ = Nothing
-
 instance (EffectDom e s) => EffectDom (ConstE e s) s where
   eFun (ConstE s) = const s
   eFun (ModifyE e) = eFun e

@@ -3,7 +3,17 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Classes where
+module Data.UCap.Classes
+  ( Cap (..)
+  , idC
+  , uniC
+  , cFun
+  , EffectDom (..)
+  , idE
+  , Meet (..)
+  , BMeet (..)
+  , Split (..)
+  ) where
 
 {-| An 'EffectDom' is a domain of effects (@e@) on some state type
     (@s@), in which each effect denotes (by 'eFun') a pure
@@ -73,8 +83,15 @@ class Meet a where
                | b <=? a = Just GT
                | otherwise = Nothing
 
+instance Meet () where
+  meet () () = ()
+  () <=? () = True
+
 class (Meet a) => BMeet a where
   meetId :: a
+
+instance BMeet () where
+  meetId = ()
 
 {-| 'Split' is related to the 'Monoid' implementation by the following
     law:
@@ -91,10 +108,16 @@ class (Eq a, Monoid a) => Split a where
               | a2 == mempty = Just a1
               | otherwise = Nothing
 
+instance Split ()
+
 class (BMeet c, Split c, Monoid (Effect c)) => Cap c where
   type Effect c
   mincap :: Effect c -> c
   mincap _ = uniC
+  
+  maxeff :: c -> Maybe (Effect c)
+  maxeff c | c == idC = Just idE
+           | otherwise = Nothing
 
   undo :: Effect c -> c
   undo _ = mempty
@@ -103,6 +126,9 @@ class (BMeet c, Split c, Monoid (Effect c)) => Cap c where
   weaken c1 c2 | meetId <=? c1 = Just idE
                | c2 <=? mempty = Just idE
                | otherwise = Nothing
+
+instance Cap () where
+  type Effect () = ()
 
 {-| The identity capability, which permits only the identity effect.
   This is a synonym for 'mempty'.
@@ -115,3 +141,6 @@ idC = mempty
 -}
 uniC :: (BMeet c) => c
 uniC = meetId
+
+cFun :: (Cap c, EffectDom (Effect c) s) => c -> Maybe (s -> s)
+cFun = fmap eFun . maxeff
