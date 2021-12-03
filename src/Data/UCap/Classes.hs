@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -8,12 +9,18 @@ module Data.UCap.Classes
   , idC
   , uniC
   , cFun
+  , Eff
+  , eff
   , EffectDom (..)
   , idE
   , Meet (..)
   , BMeet (..)
   , Split (..)
   ) where
+
+import Data.Aeson
+import Data.Maybe (fromJust)
+import GHC.Generics
 
 {-| An 'EffectDom' is a domain of effects (@e@) on some state type
     (@s@), in which each effect denotes (by 'eFun') a pure
@@ -142,5 +149,16 @@ idC = mempty
 uniC :: (BMeet c) => c
 uniC = meetId
 
-cFun :: (Cap c, EffectDom (Effect c) s) => c -> Maybe (s -> s)
-cFun = fmap eFun . maxeff
+newtype Eff c = Eff c deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON n) => ToJSON (Eff n) where
+  toEncoding = genericToEncoding defaultOptions
+instance (FromJSON n) => FromJSON (Eff n)
+
+eff :: (Cap c) => c -> Maybe (Eff c)
+eff c = case maxeff c of
+          Just _ -> Just $ Eff c
+          Nothing -> Nothing
+
+cFun :: (Cap c, EffectDom (Effect c) s) => Eff c -> s -> s
+cFun (Eff c) = eFun . fromJust . maxeff $ c

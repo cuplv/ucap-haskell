@@ -186,13 +186,20 @@ instance (Num n, Ord n) => Cap (Bounds n) where
                 else Bounds mempty
                             (addB . negate $ addAmt e)
                             (mulB $ mulAmt e)
+
+  maxeff (Bounds a s m)
+    | s <=? mempty && m <=? mempty = MulAdd mulId <$> addFun a
+    | a <=? mempty && m <=? mempty = MulAdd mulId . negate <$> addFun s
+    | a <=? mempty && s <=? mempty = MulAdd <$> mulFun m <*> pure addId
+    | otherwise = Nothing
+
   undo e = if addAmt e >= addId
               then Bounds mempty (addB $ addAmt e) mempty
               else Bounds (addB . negate $ addAmt e) mempty mempty
 
   weaken c1@(Bounds a1 s1 m1) c2@(Bounds a2 s2 m2)
     | uniC <=? c1 || c2 <=? idE = Just idE
-    | m2 <=? mempty && meetId <=? a1 = MulAdd mulId <$> (addFun s2)
+    | m2 <=? mempty && meetId <=? a1 = MulAdd mulId <$> addFun s2
     | m2 <=? mempty && meetId <=? s1 =
       MulAdd mulId . negate <$> addFun a2
     | otherwise = Nothing
