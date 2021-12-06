@@ -14,6 +14,7 @@ library
                     , Data.UCap.Const
                     , Data.UCap.Counter
                     , Data.UCap.Eff
+                    , Data.UCap.Identity
                     , Data.UCap.InfSet
     build-depends:    base ^>=4.14.3.0, containers, aeson
     hs-source-dirs:   src
