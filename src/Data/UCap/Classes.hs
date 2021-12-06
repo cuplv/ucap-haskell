@@ -1,26 +1,19 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Data.UCap.Classes
   ( Cap (..)
   , idC
   , uniC
   , cFun
-  , Eff
-  , eff
   , EffectDom (..)
   , idE
   , Meet (..)
   , BMeet (..)
   , Split (..)
+  , State'
   ) where
-
-import Data.Aeson
-import Data.Maybe (fromJust)
-import GHC.Generics
 
 {-| An 'EffectDom' is a domain of effects (@e@) on some state type
     (@s@), in which each effect denotes (by 'eFun') a pure
@@ -38,45 +31,44 @@ import GHC.Generics
     Note that 'Data.Semigroup.<>' composes effects right-to-left, just
     like function composition.
 -}
-class (Monoid e) => EffectDom e s where
-  eFun :: e -> s -> s
+class (Monoid e) => EffectDom e where
+  type State e
+  eFun :: e -> State e -> State e
 
 {-| The identity effect, a synonym for 'Data.Monoid.mempty'. -}
 idE :: (Monoid e) => e
 idE = mempty
 
-instance EffectDom () s where
-  eFun () = id
-
 instance
-  ( EffectDom e1 s1
-  , EffectDom e2 s2 )
-  => EffectDom (e1,e2) (s1,s2) where
+  ( EffectDom e1
+  , EffectDom e2 )
+  => EffectDom (e1,e2) where
+  type State (e1,e2) = (State e1, State e2)
   eFun (e1,e2) (s1,s2) =
     ( eFun e1 s1
     , eFun e2 s2 )
 
-instance
-  ( EffectDom e1 s1
-  , EffectDom e2 s2
-  , EffectDom e3 s3 )
-  => EffectDom (e1,e2,e3) (s1,s2,s3) where
-  eFun (e1,e2,e3) (s1,s2,s3) =
-    ( eFun e1 s1
-    , eFun e2 s2
-    , eFun e3 s3 )
+-- instance
+--   ( EffectDom e1 s1
+--   , EffectDom e2 s2
+--   , EffectDom e3 s3 )
+--   => EffectDom (e1,e2,e3) (s1,s2,s3) where
+--   eFun (e1,e2,e3) (s1,s2,s3) =
+--     ( eFun e1 s1
+--     , eFun e2 s2
+--     , eFun e3 s3 )
 
-instance
-  ( EffectDom e1 s1
-  , EffectDom e2 s2
-  , EffectDom e3 s3
-  , EffectDom e4 s4 )
-  => EffectDom (e1,e2,e3,e4) (s1,s2,s3,s4) where
-  eFun (e1,e2,e3,e4) (s1,s2,s3,s4) =
-    ( eFun e1 s1
-    , eFun e2 s2
-    , eFun e3 s3
-    , eFun e4 s4 )
+-- instance
+--   ( EffectDom e1 s1
+--   , EffectDom e2 s2
+--   , EffectDom e3 s3
+--   , EffectDom e4 s4 )
+--   => EffectDom (e1,e2,e3,e4) (s1,s2,s3,s4) where
+--   eFun (e1,e2,e3,e4) (s1,s2,s3,s4) =
+--     ( eFun e1 s1
+--     , eFun e2 s2
+--     , eFun e3 s3
+--     , eFun e4 s4 )
 
 class Meet a where
   meet :: a -> a -> a
@@ -117,7 +109,7 @@ class (Eq a, Monoid a) => Split a where
 
 instance Split ()
 
-class (BMeet c, Split c, Monoid (Effect c)) => Cap c where
+class (BMeet c, Split c, EffectDom (Effect c)) => Cap c where
   type Effect c
   mincap :: Effect c -> c
   mincap _ = uniC
@@ -134,8 +126,8 @@ class (BMeet c, Split c, Monoid (Effect c)) => Cap c where
                | c2 <=? mempty = Just idE
                | otherwise = Nothing
 
-instance Cap () where
-  type Effect () = ()
+type family State' c where
+  State' c = State (Effect c)
 
 {-| The identity capability, which permits only the identity effect.
   This is a synonym for 'mempty'.
@@ -149,16 +141,5 @@ idC = mempty
 uniC :: (BMeet c) => c
 uniC = meetId
 
-newtype Eff c = Eff c deriving (Show,Eq,Ord,Generic)
-
-instance (ToJSON n) => ToJSON (Eff n) where
-  toEncoding = genericToEncoding defaultOptions
-instance (FromJSON n) => FromJSON (Eff n)
-
-eff :: (Cap c) => c -> Maybe (Eff c)
-eff c = case maxeff c of
-          Just _ -> Just $ Eff c
-          Nothing -> Nothing
-
-cFun :: (Cap c, EffectDom (Effect c) s) => Eff c -> s -> s
-cFun (Eff c) = eFun . fromJust . maxeff $ c
+cFun :: (Cap c) => c -> Maybe (Effect c)
+cFun = maxeff

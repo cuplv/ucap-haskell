@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Data.UCap.Counter 
@@ -32,7 +30,7 @@ import Data.UCap.Const
 {-| 'CounterE' provides addition, subtraction, and (positive)
   multiplication effects on 'Num' values.
 -}
-type CounterE n = ConstE (MulAdd n) n
+type CounterE n = ConstE' (MulAdd n)
 
 data MulAdd n
   = MulAdd { mulAmt :: n
@@ -52,7 +50,8 @@ instance (Num n) => Semigroup (MulAdd n) where
 instance (Num n) => Monoid (MulAdd n) where
   mempty = MulAdd 1 0
 
-instance (Num n) => EffectDom (MulAdd n) n where
+instance (Num n) => EffectDom (MulAdd n) where
+  type State (MulAdd n) = n
   eFun (MulAdd m a) s = s * m + a
 
 {-| Add @n@ to the state, where @n >= 0@.  A negative @n@ will produce a
@@ -204,7 +203,7 @@ instance (Num n, Ord n) => Cap (Bounds n) where
       MulAdd mulId . negate <$> addFun a2
     | otherwise = Nothing
 
-type CounterC n = ConstC (Bounds n) n
+type CounterC n = ConstC' (Bounds n)
 
 addC :: (Num n, Ord n) => n -> CounterC n
 addC = modifyC . addC'
