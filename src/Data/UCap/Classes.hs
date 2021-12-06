@@ -86,11 +86,18 @@ instance Meet () where
   meet () () = ()
   () <=? () = True
 
+instance (Meet a, Meet b) => Meet (a,b) where
+  meet (a1,b1) (a2,b2) = (meet a1 a2, meet b1 b2)
+  (a1,b1) <=? (a2,b2) = (a1 <=? a2) && (b1 <=? b2)
+
 class (Meet a) => BMeet a where
   meetId :: a
 
 instance BMeet () where
   meetId = ()
+
+instance (BMeet a, BMeet b) => BMeet (a,b) where
+  meetId = (meetId, meetId)
 
 {-| 'Split' is related to the 'Monoid' implementation by the following
     law:
@@ -109,6 +116,9 @@ class (Eq a, Monoid a) => Split a where
 
 instance Split ()
 
+instance (Split a, Split b) => Split (a,b) where
+  split (a1,b1) (a2,b2) = (,) <$> split a1 a2 <*> split b1 b2
+
 class (BMeet c, Split c, EffectDom (Effect c)) => Cap c where
   type Effect c
   mincap :: Effect c -> c
@@ -125,6 +135,13 @@ class (BMeet c, Split c, EffectDom (Effect c)) => Cap c where
   weaken c1 c2 | meetId <=? c1 = Just idE
                | c2 <=? mempty = Just idE
                | otherwise = Nothing
+
+instance (Cap a, Cap b) => Cap (a,b) where
+  type Effect (a,b) = (Effect a, Effect b)
+  mincap (a,b) = (mincap a, mincap b)
+  maxeff (a,b) = (,) <$> maxeff a <*> maxeff b
+  undo (a,b) = (undo a, undo b)
+  weaken (a1,b1) (a2,b2) = (,) <$> weaken a1 a2 <*> weaken b1 b2
 
 type family State' c where
   State' c = State (Effect c)
