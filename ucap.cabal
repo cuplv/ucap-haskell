@@ -17,6 +17,7 @@ library
                     , Data.UCap.Either
                     , Data.UCap.Identity
                     , Data.UCap.InfSet
+                    , Data.UCap.Map
     build-depends:    base ^>=4.14.3.0, containers, aeson
     hs-source-dirs:   src
     default-language: Haskell2010

@@ -35,3 +35,5 @@ instance EffectDom (IdentityC s) where
 
 instance Cap (IdentityC s) where
   type Effect (IdentityC s) = IdentityC s
+
+type IdentityE = IdentityC
