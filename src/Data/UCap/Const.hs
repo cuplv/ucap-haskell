@@ -106,5 +106,8 @@ constC ss = ConstC (IS.fromList ss) mempty
 constC' :: (Monoid c) => InfSet s -> ConstC c s
 constC' s = ConstC s mempty
 
+constAny :: (Monoid c) => ConstC c s
+constAny = ConstC IS.universal mempty
+
 modifyC :: c -> ConstC c s
 modifyC c = ConstC IS.empty c

@@ -26,7 +26,7 @@ insertE = SetR
 adjustE :: (EffectDom e) => e -> KeyE e
 adjustE = OverLR idE
 
-deleteE :: (EffectDom e) => KeyE e
+deleteE :: KeyE e
 deleteE = SetL ()
 
 data MapE k e
@@ -76,6 +76,12 @@ type KeyC c s = EitherC (IdentityC ()) c () s
 
 type KeyC' c = KeyC c (State' c)
 
+insertAnyC :: (Monoid c) => KeyC' c
+insertAnyC = setAnyR
+
+deleteC :: (Ord (State' c), Monoid c) => KeyC' c
+deleteC = setAnyL
+
 data MapC k c s
   = MapC (InfMap k (KeyC c s))
   deriving (Show,Eq,Ord,Generic)
@@ -111,3 +117,12 @@ instance
     case IM.toMap <$> IM.unionWithA weaken m1 m2 of
       Just (e,m) | e == idE -> Just (MapE m)
       _ -> Nothing
+
+onAnyC :: KeyC' c -> MapC' k c
+onAnyC = MapC . IM.uniform
+
+insertAny :: (Monoid c) => MapC' k c
+insertAny = onAnyC insertAnyC
+
+deleteAny :: (Ord (State' c), Monoid c) => MapC' k c
+deleteAny = onAnyC deleteC

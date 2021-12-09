@@ -19,7 +19,9 @@ library
                     , Data.UCap.InfMap
                     , Data.UCap.InfSet
                     , Data.UCap.Map
-    build-depends:    base ^>=4.14.3.0, containers, aeson
+                    , Data.UCap.UCT
+                    , Data.UCap.UCT.Queue
+    build-depends:    base ^>=4.14.3.0, containers, aeson, mtl
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -29,8 +31,10 @@ test-suite test
     hs-source-dirs:   test
     main-is:          test.hs
     other-modules:    Data.UCap.InfMapTests
+                    , Data.UCap.MapTests
     build-depends:    base ^>=4.14.3.0
                     , containers
+                    , mtl
                     , tasty
                     , tasty-hunit
                     , tasty-quickcheck

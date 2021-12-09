@@ -126,5 +126,11 @@ instance
 onL :: (Monoid c2, Ord (State' c2)) => ConstC' c1 -> EitherC' c1 c2
 onL c = EitherC c idC
 
+setAnyL :: (Monoid c1, Monoid c2, Ord (State' c2)) => EitherC' c1 c2
+setAnyL = onL constAny
+
 onR :: (Monoid c1, Ord (State' c1)) => ConstC' c2 -> EitherC' c1 c2
 onR c = EitherC idC c
+
+setAnyR :: (Monoid c1, Monoid c2, Ord (State' c1)) => EitherC' c1 c2
+setAnyR = onR constAny
