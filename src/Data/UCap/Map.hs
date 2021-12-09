@@ -1,18 +1,24 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Data.UCap.Map where
 
 import Data.UCap.Classes
 import Data.UCap.Either
 import Data.UCap.Identity
+import Data.UCap.InfMap (InfMap)
+import qualified Data.UCap.InfMap as IM
+import Data.UCap.InfSet (InfSet)
+import qualified Data.UCap.InfSet as IS
 
 import Data.Aeson
 import Data.Map (Map)
 import qualified Data.Map as Map
 import GHC.Generics
 
-type KeyE = EitherE (IdentityE ())
+type KeyE e = EitherE' (IdentityE ()) e
 
 insertE :: (EffectDom e) => State e -> KeyE e
 insertE = SetR
@@ -65,3 +71,43 @@ fromKeyE :: (Ord k, EffectDom e) => k -> MapE k e -> KeyE e
 fromKeyE k (MapE m) = case Map.lookup k m of
   Just e -> e
   Nothing -> idE
+
+type KeyC c s = EitherC (IdentityC ()) c () s
+
+type KeyC' c = KeyC c (State' c)
+
+data MapC k c s
+  = MapC (InfMap k (KeyC c s))
+  deriving (Show,Eq,Ord,Generic)
+
+type MapC' k c = MapC k c (State' c)
+
+instance (Ord k, Ord s, Semigroup c) => Semigroup (MapC k c s) where
+  MapC m1 <> MapC m2 = MapC (m1 <> m2)
+
+instance (Ord k, Ord s, Monoid c) => Monoid (MapC k c s) where
+  mempty = MapC mempty
+
+instance (Ord k, Ord s, Meet c) => Meet (MapC k c s) where
+  meet (MapC m1) (MapC m2) = MapC (meet m1 m2)
+
+instance (Ord k, Ord s, BMeet c) => BMeet (MapC k c s) where
+  meetId = MapC meetId
+
+instance (Ord k, Ord s, Split c) => Split (MapC k c s) where
+  split (MapC m1) (MapC m2) = MapC <$> split m1 m2
+
+instance 
+  ( Ord k
+  , Ord s
+  , Cap c
+  , State' c ~ s
+  , Eq (Effect c)
+  ) => Cap (MapC k c s) where
+  type Effect (MapC k c s) = MapE k (Effect c)
+  mincap (MapE m) = MapC $ IM.fromMap idC (Map.map mincap m)
+  undo (MapE m) = MapC $ IM.fromMap idC (Map.map undo m)
+  weaken (MapC m1) (MapC m2) = 
+    case IM.toMap <$> IM.unionWithA weaken m1 m2 of
+      Just (e,m) | e == idE -> Just (MapE m)
+      _ -> Nothing

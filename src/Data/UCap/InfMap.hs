@@ -11,8 +11,10 @@ module Data.UCap.InfMap
   , Data.UCap.InfMap.lookup
   , union
   , unionWith
+  , unionWithA
   , Data.UCap.InfMap.map
   , toList
+  , toMap
   ) where
 
 import Data.UCap.Classes
@@ -42,11 +44,17 @@ instance (Ord k, Meet v) => Meet (InfMap k v) where
 instance (Ord k, BMeet v) => BMeet (InfMap k v) where
   meetId = uniform meetId
 
+instance (Ord k, Split v) => Split (InfMap k v) where
+  split = unionWithA split
+
 uniform :: v -> InfMap k v
 uniform v = InfMap v Map.empty
 
 fromList :: (Ord k) => v -> [(k,v)] -> InfMap k v
 fromList v vs = InfMap v (Map.fromList vs)
+
+toMap :: InfMap k v -> (v, Map k v)
+toMap (InfMap v0 m) = (v0,m)
 
 toList :: InfMap k v -> (v,[(k,v)])
 toList (InfMap v0 m) = (v0, Map.toList m)
@@ -85,6 +93,21 @@ unionWith f (InfMap v01 m1) (InfMap v02 m2) =
             m1
             m2
   in InfMap (f v01 v02) m
+
+unionWithA
+  :: (Ord k, Applicative m)
+  => (a -> b -> m c)
+  -> InfMap k a
+  -> InfMap k b
+  -> m (InfMap k c)
+unionWithA f (InfMap v01 m1) (InfMap v02 m2) =
+  let m = mergeA
+            (traverseMissing (\_ v1 -> f v1 v02))
+            (traverseMissing (\_ v2 -> f v01 v2))
+            (zipWithAMatched (\_ -> f))
+            m1
+            m2
+  in InfMap <$> f v01 v02 <*> m
 
 union :: (Ord k) => InfMap k v -> InfMap k v -> InfMap k v
 union = unionWith (\a _ -> a)

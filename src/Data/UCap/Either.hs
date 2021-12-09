@@ -10,22 +10,40 @@ import Data.UCap.Const
 import Data.Aeson
 import GHC.Generics
 
-data EitherE e1 e2
+data EitherE e1 e2 s1 s2
   = OverLR e1 e2
-  | SetL (State e1)
-  | SetR (State e2)
+  | SetL s1
+  | SetR s2
+  deriving (Show,Eq,Ord,Generic)
 
-instance (EffectDom e1, EffectDom e2) => Semigroup (EitherE e1 e2) where
+type EitherE' e1 e2 = EitherE e1 e2 (State e1) (State e2)
+
+instance
+  ( EffectDom e1
+  , EffectDom e2
+  , State e1 ~ s1
+  , State e2 ~ s2
+  ) => Semigroup (EitherE e1 e2 s1 s2) where
   OverLR e1 e2 <> OverLR f1 f2 = OverLR (e1 <> f1) (e2 <> f2)
   OverLR e1 _ <> SetL s = SetL (eFun e1 s)
   OverLR _ e2 <> SetR s = SetR (eFun e2 s)
   e <> _ = e
 
-instance (EffectDom e1, EffectDom e2) => Monoid (EitherE e1 e2) where
+instance 
+  ( EffectDom e1
+  , EffectDom e2
+  , State e1 ~ s1
+  , State e2 ~ s2
+  ) => Monoid (EitherE e1 e2 s1 s2) where
   mempty = OverLR mempty mempty
 
-instance (EffectDom e1, EffectDom e2) => EffectDom (EitherE e1 e2) where
-  type State (EitherE e1 e2) = Either (State e1) (State e2)
+instance
+  ( EffectDom e1
+  , EffectDom e2
+  , State e1 ~ s1
+  , State e2 ~ s2
+  ) => EffectDom (EitherE e1 e2 s1 s2) where
+  type State (EitherE e1 e2 s1 s2) = Either s1 s2
   eFun (OverLR e1 _) (Left s) = Left (eFun e1 s)
   eFun (OverLR _ e2) (Right s) = Right (eFun e2 s)
   eFun (SetL s) _ = Left s
@@ -35,8 +53,10 @@ data EitherC c1 c2 s1 s2
   = EitherC { overL :: ConstC c1 s1, overR :: ConstC c2 s2 }
   deriving (Show,Eq,Ord,Generic)
 
-type family EitherC' c1 c2 where
-  EitherC' c1 c2 = EitherC c1 c2 (State' c1) (State' c2)
+type EitherC' c1 c2 = EitherC c1 c2 (State' c1) (State' c2)
+
+-- type family EitherC' c1 c2 where
+--   EitherC' c1 c2 = EitherC c1 c2 (State' c1) (State' c2)
 
 instance
   ( Ord s1
@@ -89,7 +109,7 @@ instance
   , State' c1 ~ s1
   , State' c2 ~ s2
   ) => Cap (EitherC c1 c2 s1 s2) where
-  type Effect (EitherC c1 c2 s1 s2) = EitherE (Effect c1) (Effect c2)
+  type Effect (EitherC c1 c2 s1 s2) = EitherE (Effect c1) (Effect c2) s1 s2
   mincap (OverLR e1 e2) =
     EitherC (mincap (ModifyE e1)) (mincap (ModifyE e2))
   mincap (SetL s1) = EitherC (mincap (ConstE s1)) idC
