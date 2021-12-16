@@ -19,6 +19,7 @@ library
                     , Data.UCap.InfMap
                     , Data.UCap.InfSet
                     , Data.UCap.Map
+                    , Data.UCap.Op
                     , Data.UCap.UCT
                     , Data.UCap.UCT.Queue
     build-depends:    base ^>=4.14.3.0, containers, aeson, mtl
