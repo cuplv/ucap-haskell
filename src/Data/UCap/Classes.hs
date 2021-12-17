@@ -6,17 +6,16 @@ module Data.UCap.Classes
   ( Cap (..)
   , idC
   , uniC
-  , cFun
   , EffectDom (..)
   , idE
   , Meet (..)
   , BMeet (..)
   , Split (..)
-  , State'
+  , CState
   ) where
 
 {-| An 'EffectDom' is a domain of effects (@e@) on some state type
-    (@s@), in which each effect denotes (by 'eFun') a pure
+    (@'EDState' e@), in which each effect denotes (by 'eFun') a pure
     function on a state value.  The effects must form a
     'Data.Monoid.Monoid' according to the following laws:
 
@@ -25,15 +24,16 @@ module Data.UCap.Classes
 'eFun' 'Data.Monoid.mempty' = 'Data.Function.id'
 
 \-\- Composition
-'eFun' (e2 'Data.Semigroup.<>' e1) = 'eFun' e2 'Data.Function..' 'eFun' e1
+'eFun' (e1 'Data.Semigroup.<>' e2) = 'eFun' e2 'Data.Function..' 'eFun' e1
 @
 
-    Note that 'Data.Semigroup.<>' composes effects right-to-left, just
-    like function composition.
+    Note that 'Data.Semigroup.<>' composes effects left-to-right,
+    unlike the right-to-left 'Data.Function..' composition it relates
+    to.
 -}
 class (Monoid e) => EffectDom e where
-  type State e
-  eFun :: e -> State e -> State e
+  type EDState e
+  eFun :: e -> EDState e -> EDState e
 
 {-| The identity effect, a synonym for 'Data.Monoid.mempty'. -}
 idE :: (Monoid e) => e
@@ -43,32 +43,10 @@ instance
   ( EffectDom e1
   , EffectDom e2 )
   => EffectDom (e1,e2) where
-  type State (e1,e2) = (State e1, State e2)
+  type EDState (e1,e2) = (EDState e1, EDState e2)
   eFun (e1,e2) (s1,s2) =
     ( eFun e1 s1
     , eFun e2 s2 )
-
--- instance
---   ( EffectDom e1 s1
---   , EffectDom e2 s2
---   , EffectDom e3 s3 )
---   => EffectDom (e1,e2,e3) (s1,s2,s3) where
---   eFun (e1,e2,e3) (s1,s2,s3) =
---     ( eFun e1 s1
---     , eFun e2 s2
---     , eFun e3 s3 )
-
--- instance
---   ( EffectDom e1 s1
---   , EffectDom e2 s2
---   , EffectDom e3 s3
---   , EffectDom e4 s4 )
---   => EffectDom (e1,e2,e3,e4) (s1,s2,s3,s4) where
---   eFun (e1,e2,e3,e4) (s1,s2,s3,s4) =
---     ( eFun e1 s1
---     , eFun e2 s2
---     , eFun e3 s3
---     , eFun e4 s4 )
 
 class Meet a where
   meet :: a -> a -> a
@@ -119,32 +97,27 @@ instance Split ()
 instance (Split a, Split b) => Split (a,b) where
   split (a1,b1) (a2,b2) = (,) <$> split a1 a2 <*> split b1 b2
 
-class (BMeet c, Split c, EffectDom (Effect c)) => Cap c where
-  type Effect c
-  mincap :: Effect c -> c
+class (BMeet c, Split c, EffectDom (CEffect c)) => Cap c where
+  type CEffect c
+  mincap :: CEffect c -> c
   mincap _ = uniC
-  
-  maxeff :: c -> Maybe (Effect c)
-  maxeff c | c == idC = Just idE
-           | otherwise = Nothing
 
-  undo :: Effect c -> c
+  undo :: CEffect c -> c
   undo _ = mempty
 
-  weaken :: c -> c -> Maybe (Effect c)
+  weaken :: c -> c -> Maybe (CEffect c)
   weaken c1 c2 | meetId <=? c1 = Just idE
                | c2 <=? mempty = Just idE
                | otherwise = Nothing
 
 instance (Cap a, Cap b) => Cap (a,b) where
-  type Effect (a,b) = (Effect a, Effect b)
+  type CEffect (a,b) = (CEffect a, CEffect b)
   mincap (a,b) = (mincap a, mincap b)
-  maxeff (a,b) = (,) <$> maxeff a <*> maxeff b
   undo (a,b) = (undo a, undo b)
   weaken (a1,b1) (a2,b2) = (,) <$> weaken a1 a2 <*> weaken b1 b2
 
-type family State' c where
-  State' c = State (Effect c)
+type family CState c where
+  CState c = EDState (CEffect c)
 
 {-| The identity capability, which permits only the identity effect.
   This is a synonym for 'mempty'.
@@ -157,6 +130,3 @@ idC = mempty
 -}
 uniC :: (BMeet c) => c
 uniC = meetId
-
-cFun :: (Cap c) => c -> Maybe (Effect c)
-cFun = maxeff

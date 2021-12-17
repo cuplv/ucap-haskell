@@ -43,15 +43,15 @@ instance (ToJSON n) => ToJSON (MulAdd n) where
 instance (FromJSON n) => FromJSON (MulAdd n)
 
 instance (Num n) => Semigroup (MulAdd n) where
-  MulAdd m2 a2 <> MulAdd m1 a1 =
+  MulAdd m1 a1 <> MulAdd m2 a2 =
     -- Distributing multiplication over addition.
-    MulAdd (m1 + m2) (a1 * m2 + a2)
+    MulAdd (m1 * m2) (a1 * m2 + a2)
 
 instance (Num n) => Monoid (MulAdd n) where
   mempty = MulAdd 1 0
 
 instance (Num n) => EffectDom (MulAdd n) where
-  type State (MulAdd n) = n
+  type EDState (MulAdd n) = n
   eFun (MulAdd m a) s = s * m + a
 
 {-| Add @n@ to the state, where @n >= 0@.  A negative @n@ will produce a
@@ -179,18 +179,12 @@ instance (Num n, Ord n) => Split (Bounds n) where
     Bounds <$> split a1 a2 <*> split s1 s2 <*> split m1 m2
 
 instance (Num n, Ord n) => Cap (Bounds n) where
-  type Effect (Bounds n) = MulAdd n
+  type CEffect (Bounds n) = MulAdd n
   mincap e = if addAmt e >= addId
                 then Bounds (addB $ addAmt e) mempty (mulB $ mulAmt e)
                 else Bounds mempty
                             (addB . negate $ addAmt e)
                             (mulB $ mulAmt e)
-
-  maxeff (Bounds a s m)
-    | s <=? mempty && m <=? mempty = MulAdd mulId <$> addFun a
-    | a <=? mempty && m <=? mempty = MulAdd mulId . negate <$> addFun s
-    | a <=? mempty && s <=? mempty = MulAdd <$> mulFun m <*> pure addId
-    | otherwise = Nothing
 
   undo e = if addAmt e >= addId
               then Bounds mempty (addB $ addAmt e) mempty

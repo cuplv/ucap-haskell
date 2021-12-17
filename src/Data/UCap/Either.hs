@@ -16,34 +16,34 @@ data EitherE e1 e2 s1 s2
   | SetR s2
   deriving (Show,Eq,Ord,Generic)
 
-type EitherE' e1 e2 = EitherE e1 e2 (State e1) (State e2)
+type EitherE' e1 e2 = EitherE e1 e2 (EDState e1) (EDState e2)
 
 instance
   ( EffectDom e1
   , EffectDom e2
-  , State e1 ~ s1
-  , State e2 ~ s2
+  , EDState e1 ~ s1
+  , EDState e2 ~ s2
   ) => Semigroup (EitherE e1 e2 s1 s2) where
   OverLR e1 e2 <> OverLR f1 f2 = OverLR (e1 <> f1) (e2 <> f2)
-  OverLR e1 _ <> SetL s = SetL (eFun e1 s)
-  OverLR _ e2 <> SetR s = SetR (eFun e2 s)
-  e <> _ = e
+  SetL s <> OverLR e1 _ = SetL (eFun e1 s)
+  SetR s <> OverLR _ e2 = SetR (eFun e2 s)
+  _ <> e = e
 
 instance 
   ( EffectDom e1
   , EffectDom e2
-  , State e1 ~ s1
-  , State e2 ~ s2
+  , EDState e1 ~ s1
+  , EDState e2 ~ s2
   ) => Monoid (EitherE e1 e2 s1 s2) where
   mempty = OverLR mempty mempty
 
 instance
   ( EffectDom e1
   , EffectDom e2
-  , State e1 ~ s1
-  , State e2 ~ s2
+  , EDState e1 ~ s1
+  , EDState e2 ~ s2
   ) => EffectDom (EitherE e1 e2 s1 s2) where
-  type State (EitherE e1 e2 s1 s2) = Either s1 s2
+  type EDState (EitherE e1 e2 s1 s2) = Either s1 s2
   eFun (OverLR e1 _) (Left s) = Left (eFun e1 s)
   eFun (OverLR _ e2) (Right s) = Right (eFun e2 s)
   eFun (SetL s) _ = Left s
@@ -53,7 +53,7 @@ data EitherC c1 c2 s1 s2
   = EitherC { overL :: ConstC c1 s1, overR :: ConstC c2 s2 }
   deriving (Show,Eq,Ord,Generic)
 
-type EitherC' c1 c2 = EitherC c1 c2 (State' c1) (State' c2)
+type EitherC' c1 c2 = EitherC c1 c2 (CState c1) (CState c2)
 
 -- type family EitherC' c1 c2 where
 --   EitherC' c1 c2 = EitherC c1 c2 (State' c1) (State' c2)
@@ -106,10 +106,11 @@ instance
   , Ord s2
   , Cap c1
   , Cap c2
-  , State' c1 ~ s1
-  , State' c2 ~ s2
+  , CState c1 ~ s1
+  , CState c2 ~ s2
   ) => Cap (EitherC c1 c2 s1 s2) where
-  type Effect (EitherC c1 c2 s1 s2) = EitherE (Effect c1) (Effect c2) s1 s2
+  type CEffect (EitherC c1 c2 s1 s2) =
+    EitherE (CEffect c1) (CEffect c2) s1 s2
   mincap (OverLR e1 e2) =
     EitherC (mincap (ModifyE e1)) (mincap (ModifyE e2))
   mincap (SetL s1) = EitherC (mincap (ConstE s1)) idC
@@ -123,14 +124,14 @@ instance
       (Just (ModifyE e1), Just (ModifyE e2)) -> Just $ OverLR e1 e2
       _ -> Nothing
 
-onL :: (Monoid c2, Ord (State' c2)) => ConstC' c1 -> EitherC' c1 c2
+onL :: (Monoid c2, Ord (CState c2)) => ConstC' c1 -> EitherC' c1 c2
 onL c = EitherC c idC
 
-setAnyL :: (Monoid c1, Monoid c2, Ord (State' c2)) => EitherC' c1 c2
+setAnyL :: (Monoid c1, Monoid c2, Ord (CState c2)) => EitherC' c1 c2
 setAnyL = onL constAny
 
-onR :: (Monoid c1, Ord (State' c1)) => ConstC' c2 -> EitherC' c1 c2
+onR :: (Monoid c1, Ord (CState c1)) => ConstC' c2 -> EitherC' c1 c2
 onR c = EitherC idC c
 
-setAnyR :: (Monoid c1, Monoid c2, Ord (State' c1)) => EitherC' c1 c2
+setAnyR :: (Monoid c1, Monoid c2, Ord (CState c1)) => EitherC' c1 c2
 setAnyR = onR constAny

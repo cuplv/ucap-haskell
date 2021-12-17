@@ -30,10 +30,10 @@ instance BMeet (IdentityC s) where
 instance Split (IdentityC s)
 
 instance EffectDom (IdentityC s) where
-  type State (IdentityC s) = s
+  type EDState (IdentityC s) = s
   eFun IdentityC = id
 
 instance Cap (IdentityC s) where
-  type Effect (IdentityC s) = IdentityC s
+  type CEffect (IdentityC s) = IdentityC s
 
 type IdentityE = IdentityC

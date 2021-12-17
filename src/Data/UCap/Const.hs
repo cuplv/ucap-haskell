@@ -33,28 +33,28 @@ instance (ToJSON e, ToJSON s) => ToJSON (ConstE e s) where
   toEncoding = genericToEncoding defaultOptions
 instance (FromJSON e, FromJSON s) => FromJSON (ConstE e s)
 
-instance (EffectDom e, State e ~ s) => Semigroup (ConstE e s) where
-  ConstE s <> _ = ConstE s
-  ModifyE e2 <> ModifyE e1 = ModifyE (e2 <> e1)
-  ModifyE e <> ConstE s = ConstE (eFun e s)
+instance (EffectDom e, EDState e ~ s) => Semigroup (ConstE e s) where
+  _ <> ConstE s = ConstE s
+  ModifyE e1 <> ModifyE e2 = ModifyE (e1 <> e2)
+  ConstE s <> ModifyE e = ConstE (eFun e s)
 
-instance (EffectDom e, State e ~ s) => Monoid (ConstE e s) where
+instance (EffectDom e, EDState e ~ s) => Monoid (ConstE e s) where
   mempty = ModifyE mempty
 
-instance (EffectDom e, State e ~ s) => EffectDom (ConstE e s) where
-  type State (ConstE e s) = s
+instance (EffectDom e, EDState e ~ s) => EffectDom (ConstE e s) where
+  type EDState (ConstE e s) = s
   eFun (ConstE s) = const s
   eFun (ModifyE e) = eFun e
 
 type family ConstE' e where
-  ConstE' e = ConstE e (State e)
+  ConstE' e = ConstE e (EDState e)
 
 data ConstC c s
   = ConstC { setVals :: InfSet s, lowerC :: c }
   deriving (Eq,Ord,Generic)
 
 type family ConstC' c where
-  ConstC' c = ConstC c (State' c)
+  ConstC' c = ConstC c (CState c)
 
 instance (Ord s, Show c, Show s, BMeet c, Monoid c) => Show (ConstC c s) where
   show c | uniC <=? c = "uniC"
@@ -88,8 +88,8 @@ instance (Ord s, Split c) => Split (ConstC c s) where
        then ConstC s1 <$> split c1 c2
        else Nothing
 
-instance (Ord s, Meet c, Cap c, Split c, State' c ~ s) => Cap (ConstC c s) where
-  type Effect (ConstC c s) = ConstE (Effect c) s
+instance (Ord s, Meet c, Cap c, Split c, CState c ~ s) => Cap (ConstC c s) where
+  type CEffect (ConstC c s) = ConstE (CEffect c) s
   mincap (ConstE s) = ConstC (IS.singleton s) mempty
   mincap (ModifyE e) = ConstC IS.empty (mincap e)
 
