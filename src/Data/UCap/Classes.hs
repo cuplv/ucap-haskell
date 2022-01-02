@@ -14,6 +14,10 @@ module Data.UCap.Classes
   , CState
   ) where
 
+comm3 a b c = (a,b,c)
+
+comm4 a b c d = (a,b,c,d)
+
 {-| An 'EffectDom' is a domain of effects (@e@) on some state type
     (@'EDState' e@), in which each effect denotes (by 'eFun') a pure
     function on a state value.  The effects must form a
@@ -48,6 +52,30 @@ instance
     ( eFun e1 s1
     , eFun e2 s2 )
 
+instance
+  ( EffectDom e1
+  , EffectDom e2
+  , EffectDom e3 )
+  => EffectDom (e1,e2,e3) where
+  type EDState (e1,e2,e3) = (EDState e1, EDState e2, EDState e3)
+  eFun (e1,e2,e3) (s1,s2,s3) =
+    ( eFun e1 s1
+    , eFun e2 s2
+    , eFun e3 s3 )
+
+instance
+  ( EffectDom e1
+  , EffectDom e2
+  , EffectDom e3
+  , EffectDom e4 )
+  => EffectDom (e1,e2,e3,e4) where
+  type EDState (e1,e2,e3,e4) = (EDState e1, EDState e2, EDState e3, EDState e4)
+  eFun (e1,e2,e3,e4) (s1,s2,s3,s4) =
+    ( eFun e1 s1
+    , eFun e2 s2
+    , eFun e3 s3
+    , eFun e4 s4 )
+
 class Meet a where
   meet :: a -> a -> a
   (<=?) :: a -> a -> Bool
@@ -68,6 +96,14 @@ instance (Meet a, Meet b) => Meet (a,b) where
   meet (a1,b1) (a2,b2) = (meet a1 a2, meet b1 b2)
   (a1,b1) <=? (a2,b2) = (a1 <=? a2) && (b1 <=? b2)
 
+instance (Meet a, Meet b, Meet c) => Meet (a,b,c) where
+  meet (a1,b1,c1) (a2,b2,c2) = (meet a1 a2, meet b1 b2, meet c1 c2)
+  (a1,b1,c1) <=? (a2,b2,c2) = (a1 <=? a2) && (b1 <=? b2) && (c1 <=? c2)
+
+instance (Meet a, Meet b, Meet c, Meet d) => Meet (a,b,c,d) where
+  meet (a1,b1,c1,d1) (a2,b2,c2,d2) = (meet a1 a2, meet b1 b2, meet c1 c2, meet d1 d2)
+  (a1,b1,c1,d1) <=? (a2,b2,c2,d2) = (a1 <=? a2) && (b1 <=? b2) && (c1 <=? c2) && (d1 <=? d2)
+
 class (Meet a) => BMeet a where
   meetId :: a
 
@@ -76,6 +112,12 @@ instance BMeet () where
 
 instance (BMeet a, BMeet b) => BMeet (a,b) where
   meetId = (meetId, meetId)
+
+instance (BMeet a, BMeet b, BMeet c) => BMeet (a,b,c) where
+  meetId = (meetId, meetId, meetId)
+
+instance (BMeet a, BMeet b, BMeet c, BMeet d) => BMeet (a,b,c,d) where
+  meetId = (meetId, meetId, meetId, meetId)
 
 {-| 'Split' is related to the 'Monoid' implementation by the following
     law:
@@ -97,6 +139,12 @@ instance Split ()
 instance (Split a, Split b) => Split (a,b) where
   split (a1,b1) (a2,b2) = (,) <$> split a1 a2 <*> split b1 b2
 
+instance (Split a, Split b, Split c) => Split (a,b,c) where
+  split (a1,b1,c1) (a2,b2,c2) = comm3 <$> split a1 a2 <*> split b1 b2 <*> split c1 c2
+
+instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
+  split (a1,b1,c1,d1) (a2,b2,c2,d2) = comm4 <$> split a1 a2 <*> split b1 b2 <*> split c1 c2 <*> split d1 d2
+
 class (BMeet c, Split c, EffectDom (CEffect c)) => Cap c where
   type CEffect c
   mincap :: CEffect c -> c
@@ -115,6 +163,18 @@ instance (Cap a, Cap b) => Cap (a,b) where
   mincap (a,b) = (mincap a, mincap b)
   undo (a,b) = (undo a, undo b)
   weaken (a1,b1) (a2,b2) = (,) <$> weaken a1 a2 <*> weaken b1 b2
+
+instance (Cap a, Cap b, Cap c) => Cap (a,b,c) where
+  type CEffect (a,b,c) = (CEffect a, CEffect b, CEffect c)
+  mincap (a,b,c) = (mincap a, mincap b, mincap c)
+  undo (a,b,c) = (undo a, undo b, undo c)
+  weaken (a1,b1,c1) (a2,b2,c2) = comm3 <$> weaken a1 a2 <*> weaken b1 b2 <*> weaken c1 c2
+
+instance (Cap a, Cap b, Cap c, Cap d) => Cap (a,b,c,d) where
+  type CEffect (a,b,c,d) = (CEffect a, CEffect b, CEffect c, CEffect d)
+  mincap (a,b,c,d) = (mincap a, mincap b, mincap c, mincap d)
+  undo (a,b,c,d) = (undo a, undo b, undo c, undo d)
+  weaken (a1,b1,c1,d1) (a2,b2,c2,d2) = comm4 <$> weaken a1 a2 <*> weaken b1 b2 <*> weaken c1 c2 <*> weaken d1 d2
 
 type family CState c where
   CState c = EDState (CEffect c)
