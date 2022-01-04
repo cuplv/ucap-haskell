@@ -1,10 +1,6 @@
 module Data.UCapTests (testUCap) where
 
-import Data.UCap.Classes
-import Data.UCap.Const
-import Data.UCap.Counter
-import Data.UCap.Either
-import Data.UCap.Map
+import Data.UCap
 
 import qualified Data.Map as Map
 import Test.Tasty
