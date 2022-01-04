@@ -97,6 +97,9 @@ type KeyC' c = KeyC c (CState c)
 insertAnyC :: (Monoid c) => KeyC' c
 insertAnyC = setAnyR
 
+-- adjustC :: KeyC' c
+-- adjustC = onR
+
 deleteC :: (Ord (CState c), Monoid c) => KeyC' c
 deleteC = setAnyL
 
@@ -135,6 +138,9 @@ instance
     case IM.toMap <$> IM.unionWithA weaken m1 m2 of
       Just (e,m) | e == idE -> Just (MapE m)
       _ -> Nothing
+
+adjustC :: (Ord k, Cap c, Ord (CState c)) => k -> c -> MapC' k c
+adjustC k c = MapC $ IM.fromList uniC [(k,onR c)]
 
 onAnyC :: KeyC' c -> MapC' k c
 onAnyC = MapC . IM.uniform

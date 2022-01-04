@@ -124,14 +124,14 @@ instance
       (Just (ModifyE e1), Just (ModifyE e2)) -> Just $ OverLR e1 e2
       _ -> Nothing
 
-onL :: (Monoid c2, Ord (CState c2)) => ConstC' c1 -> EitherC' c1 c2
-onL c = EitherC c idC
+onL :: (Monoid c2, Ord (CState c2)) => c1 -> EitherC' c1 c2
+onL c = EitherC (modifyC c) idC
 
 setAnyL :: (Monoid c1, Monoid c2, Ord (CState c2)) => EitherC' c1 c2
-setAnyL = onL constAny
+setAnyL = EitherC constAny idC
 
-onR :: (Monoid c1, Ord (CState c1)) => ConstC' c2 -> EitherC' c1 c2
-onR c = EitherC idC c
+onR :: (Monoid c1, Ord (CState c1)) => c2 -> EitherC' c1 c2
+onR c = EitherC idC (modifyC c)
 
 setAnyR :: (Monoid c1, Monoid c2, Ord (CState c1)) => EitherC' c1 c2
-setAnyR = onR constAny
+setAnyR = EitherC idC constAny
