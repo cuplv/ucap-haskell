@@ -16,11 +16,15 @@ library
     other-modules:    Data.UCap.Classes
                     , Data.UCap.Const
                     , Data.UCap.Counter
+                    , Data.UCap.Editor
                     , Data.UCap.Either
                     , Data.UCap.Identity
+                    , Data.UCap.Lens
                     , Data.UCap.Map
                     , Data.UCap.Op.Internal
                     , Data.UCap.Op.Counter
+                    , Data.UCap.Op.Either
+                    , Data.UCap.Op.Map
     build-depends:    base ^>=4.14.3.0
                     , containers
                     , aeson

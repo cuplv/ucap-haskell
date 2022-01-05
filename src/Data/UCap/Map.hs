@@ -1,17 +1,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Data.UCap.Map where
 
 import Data.UCap.Classes
+import Data.UCap.Const
 import Data.UCap.Either
 import Data.UCap.Identity
 import Data.UCap.InfMap (InfMap)
 import qualified Data.UCap.InfMap as IM
 import Data.UCap.InfSet (InfSet)
 import qualified Data.UCap.InfSet as IS
+import Data.UCap.Lens
 
 import Data.Aeson
 import Data.Map (Map)
@@ -104,7 +107,7 @@ deleteC :: (Ord (CState c), Monoid c) => KeyC' c
 deleteC = setAnyL
 
 data MapC k c s
-  = MapC (InfMap k (KeyC c s))
+  = MapC { _unMapC :: InfMap k (KeyC c s) }
   deriving (Show,Eq,Ord,Generic)
 
 type MapC' k c = MapC k c (CState c)
@@ -150,3 +153,8 @@ insertAny = onAnyC insertAnyC
 
 deleteAny :: (Ord (CState c), Monoid c) => MapC' k c
 deleteAny = onAnyC deleteC
+
+atMapC :: (Ord k) => k -> Lens' (MapC' k c) c
+atMapC k = lens
+  (\(MapC a) -> lowerC . overR . (^. IM.at k) $ a)
+  (\(MapC a) c -> MapC $ a & IM.at k .~ onR c)

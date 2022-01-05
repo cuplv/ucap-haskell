@@ -6,6 +6,7 @@ module Data.UCap.Either where
 
 import Data.UCap.Classes
 import Data.UCap.Const
+import Data.UCap.Lens
 
 import Data.Aeson
 import GHC.Generics
@@ -135,3 +136,13 @@ onR c = EitherC idC (modifyC c)
 
 setAnyR :: (Monoid c1, Monoid c2, Ord (CState c1)) => EitherC' c1 c2
 setAnyR = EitherC idC constAny
+
+atL :: Lens' (EitherC' c1 c2) c1
+atL = lens
+  (lowerC . overL)
+  (\(EitherC (ConstC s _) r) c -> EitherC (ConstC s c) r)
+
+atR :: Lens' (EitherC' c1 c2) c2
+atR = lens
+  (lowerC . overR)
+  (\(EitherC l (ConstC s _)) c -> EitherC l (ConstC s c))

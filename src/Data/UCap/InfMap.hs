@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Data.UCap.InfMap
   ( InfMap
@@ -15,6 +16,7 @@ module Data.UCap.InfMap
   , Data.UCap.InfMap.map
   , toList
   , toMap
+  , Data.UCap.InfMap.at
   ) where
 
 import Data.UCap.Classes
@@ -24,6 +26,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
 import GHC.Generics
+import Lens.Micro.GHC
 
 data InfMap k v =
   InfMap { baseVal :: v
@@ -125,3 +128,8 @@ compareWith
   -> InfMap k v
   -> Bool
 compareWith f m1 m2 = Data.UCap.InfMap.and (unionWith f m1 m2)
+
+at :: (Ord k) => k -> Lens' (InfMap k v) v
+at k = lens get set
+  where get = Data.UCap.InfMap.lookup k
+        set s b = insert k b s

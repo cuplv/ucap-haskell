@@ -4,8 +4,8 @@
 module Data.UCap.Op.Internal where
 
 import Data.UCap.Classes
-
-import Lens.Micro.GHC
+import Data.UCap.Editor
+import Data.UCap.Lens
 
 data OpBody e s a
   = OpBody { opBodyFun :: s -> Maybe (e,a) }
@@ -93,22 +93,22 @@ mkPre r w fo = Op r w idC fo
 (<*>=) :: (Applicative f, Monad g) => f (g a) -> f (a -> g b) -> f (g b)
 (<*>=) m f = fmap (>>=) m <*> f
 
-type CapLens c1 c2 = (Lens' c1 c2, Lens' (CEffect c1) (CEffect c2), Lens' (CState c1) (CState c2))
+edLift :: Editor c1 c2 -> Op' c2 a -> Op' c1 a
+edLift ed (Op r w p b) = Op
+  (readLift ed r)
+  (writeLift ed w)
+  (writeLift ed p)
+  (edLiftB ed b)
 
-opL :: (Cap c1, Cap c2) => CapLens c1 c2 -> Op' c2 a -> Op' c1 a
-opL (lc, le, ls) (Op r w p (OpBody f)) = Op
-  (lc `meetTo` r)
-  (lc `plusTo` w)
-  (lc `plusTo` p)
-  (OpBody $ \s -> case f (s^.ls) of
-                    Just (e,a) -> Just (le `plusTo` e, a)
-                    Nothing -> Nothing)
+edLiftB :: Editor c1 c2 -> OpBody' c2 a -> OpBody' c1 a
+edLiftB ed (OpBody f) = OpBody $ \s ->
+  case zoomState ed s >>= f of
+    Just (e,a) -> Just (effLift ed e, a)
+    Nothing -> Nothing
 
-(/\~) :: (Meet a) => ASetter s t a a -> a -> s -> t
-(/\~) l b = l %~ meet b
-
-meetTo :: (Meet a, BMeet s) => ASetter s t a a -> a -> t
-meetTo l b = meetId & l /\~ b
-
-plusTo :: (Monoid a, Monoid s) => ASetter s t a a -> a -> t
-plusTo l b = mempty & l <>~ b
+edLiftP :: Editor c1 c2 -> PreOp c2 a b -> PreOp c1 a b
+edLiftP ed (Op r w p mf) = Op
+  (readLift ed r)
+  (writeLift ed w)
+  (writeLift ed p)
+  (edLiftB ed . mf)
