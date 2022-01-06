@@ -12,6 +12,7 @@ library
                     , Data.UCap.Bound
                     , Data.UCap.InfMap
                     , Data.UCap.InfSet
+                    , Data.UCap.Lens
                     , Data.UCap.Op
     other-modules:    Data.UCap.Classes
                     , Data.UCap.Const
@@ -19,7 +20,6 @@ library
                     , Data.UCap.Editor
                     , Data.UCap.Either
                     , Data.UCap.Identity
-                    , Data.UCap.Lens
                     , Data.UCap.Map
                     , Data.UCap.Op.Internal
                     , Data.UCap.Op.Counter
