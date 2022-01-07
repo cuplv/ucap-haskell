@@ -10,6 +10,7 @@ maintainer:         nicklewchenko92@gmail.com
 library
     exposed-modules:  Data.UCap
                     , Data.UCap.Bound
+                    , Data.UCap.Editor
                     , Data.UCap.InfMap
                     , Data.UCap.InfSet
                     , Data.UCap.Lens
@@ -17,11 +18,11 @@ library
     other-modules:    Data.UCap.Classes
                     , Data.UCap.Const
                     , Data.UCap.Counter
-                    , Data.UCap.Editor
                     , Data.UCap.Either
                     , Data.UCap.Identity
                     , Data.UCap.Map
                     , Data.UCap.Op.Internal
+                    , Data.UCap.Op.Internal.Context
                     , Data.UCap.Op.Counter
                     , Data.UCap.Op.Either
                     , Data.UCap.Op.Map

@@ -9,13 +9,13 @@ upperBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
 upperBound = queryOp subAny
 
 atMost :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
-atMost = pairOp idOp upperBound *>> mapOp (\(x,s) -> x >= s)
+atMost = pairOp idOp upperBound *>= mapOp (\(x,s) -> x >= s)
 
 lowerBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
 lowerBound = queryOp addAny
 
 atLeast :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
-atLeast = pairOp idOp lowerBound *>> mapOp (\(x,s) -> x <= s)
+atLeast = pairOp idOp lowerBound *>= mapOp (\(x,s) -> x <= s)
 
 addOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) a m n
 addOp n = effectOp' (addE n) n
