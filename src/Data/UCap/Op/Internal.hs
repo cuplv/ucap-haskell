@@ -6,160 +6,155 @@ module Data.UCap.Op.Internal where
 import Data.UCap.Classes
 import Data.UCap.Editor
 
-data OpBody e s a
-  = OpBody { opBodyFun :: s -> Maybe (e,a) }
+import Control.Monad.Except
 
-type OpBody' c a = OpBody (CEffect c) (CState c) a
+data OpBody c m a
+  = OpBody (CState c -> m (CEffect c, a))
 
-instance Functor (OpBody e s) where
-  fmap f (OpBody b) = OpBody $
-    (\s -> (\(e,a) -> (e, f a)) <$> b s)
+runBody :: OpBody c m a -> CState c -> m (CEffect c, a)
+runBody (OpBody b) = b
 
-opBFail :: OpBody e s a
-opBFail = OpBody $ const Nothing
+modEff
+  :: (Functor m, Cap c)
+  => (CEffect c -> CEffect c)
+  -> OpBody c m a
+  -> OpBody c m a
+modEff f (OpBody b) = OpBody $ \s -> f' <$> b s
+  where f' (e,a) = (f e, a)
 
-opBEffect :: e -> OpBody e s ()
-opBEffect e = OpBody . const $ Just (e, ())
+instance (Functor m) => Functor (OpBody c m) where
+  fmap f (OpBody b) = OpBody $ (fmap.fmap.fmap) f b
 
-opBRead :: (Monoid e) => OpBody e s s
-opBRead = OpBody $ \s -> Just (idE,s)
+instance (Monad m, Cap c) => Applicative (OpBody c m) where
+  pure = OpBody . const . pure . pure
+  OpBody b1 <*> OpBody b2 = OpBody $ \s -> do
+    (e1,f) <- b1 s
+    (e2,a) <- b2 (eFun e1 s)
+    return (e1 <> e2, f a)
 
-opBTest :: (Monoid e) => (s -> Bool) -> OpBody e s ()
-opBTest t = OpBody $ \s ->
-  if t s
-     then Just (idE, ())
-     else Nothing
-
-instance (EffectDom e, EDState e ~ s) => Applicative (OpBody e s) where
-  pure a = OpBody . const $ Just (idE,a)
-  OpBody b1 <*> OpBody b2 = OpBody $ \s -> case b1 s of
-    Just (e1,f) -> case b2 (eFun e1 s) of
-      Just (e2,a) -> Just (e1 <> e2, f a)
-      Nothing -> Nothing
-    Nothing -> Nothing
-
-instance (EffectDom e, EDState e ~ s) => Monad (OpBody e s) where
+instance (Monad m, Cap c) => Monad (OpBody c m) where
   return = pure
-  OpBody b1 >>= m = OpBody $ \s -> case b1 s of
-    Just (e1,a1) -> case opBodyFun (m a1) (eFun e1 s) of
-      Just (e2,a2) -> Just (e1 <> e2, a2)
-      Nothing -> Nothing
-    Nothing -> Nothing
+  OpBody b1 >>= f = OpBody $ \s -> do
+    (e1,a1) <- b1 s
+    let OpBody b2 = f a1
+    (e2,a2) <- b2 (eFun e1 s)
+    return (e1 <> e2, a2)
 
--- data OpResult x e a = OpResult (Either x (e,a))
-
--- instance Functor (OpResult x e) where
---   fmap f (OpResult m) = OpResult $ (fmap.fmap) f m
-
--- instance (Monoid e) => Applicative (OpResult x e) where
---   pure a = OpResult (Right (mempty,a))
---   OpResult m1 <*> OpResult m2 = case m1 of
---     Just (e1,f) -> case m2 of
---                      _ -> undefined
-
-data Op c e a m b
+data Op c a m b
   = Op { opRead :: c
        , opWrite :: c
        , opProduces :: c
-       , opBody :: a -> CState c -> m (Either e (CEffect c, b))
+       , opBody :: a -> OpBody c m b
        }
 
-instance (Functor m) => Functor (Op c e a m) where
-  fmap f (Op r w p b) = Op r w p $
-    (fmap.fmap.fmap.fmap.fmap) f b
+instance (Functor m) => Functor (Op c a m) where
+  fmap f (Op r w p b) = Op r w p $ (fmap.fmap) f b
 
-instance (Monad m, Cap c) => Applicative (Op c e a m) where
-  pure a = Op uniC idC idC (\_ _ -> pure $ Right (idE, a))
+instance (Monad m, Cap c) => Applicative (Op c a m) where
+  pure a = Op uniC idC idC $ const (pure a) -- (\_ _ -> pure $ (idE, a))
 
-  Op r1 w1 p1 b1 <*> Op r2 w2 p2 b2 = feeds
-    (Op r1 w1 p1 (\a -> (fmap.fmap.fmap.fmap) (\f -> (a,f)) (b1 a)))
-    (Op r2 w2 p2 (\(a,f) -> (fmap.fmap.fmap.fmap) f (b2 a)))
+  Op r1 w1 p1 b1 <*> Op r2 w2 p2 b2 = pipe
+    (Op r1 w1 p1 $ \a -> (\f -> (a,f)) <$> b1 a)
+    (Op r2 w2 p2 $ \(a,f) -> f <$> b2 a)
 
-feeds
+pipe
   :: (Monad m, Cap c)
-  => Op c e a1 m a2
-  -> Op c e a2 m a3
-  -> Op c e a1 m a3
-feeds (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
+  => Op c a1 m a2
+  -> Op c a2 m a3
+  -> Op c a1 m a3
+pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
   let (w3,p3) = case (split w2 p1, split p1 w2) of
                   (Just w2',_) -> (w1 <> w2', p2)
                   (_,Just p1') -> (w1, p1' <> p2)
                   _ -> (w1 <> w2, p1 <> p2)
-  in Op (r1 `meet` r2) w3 p3 $ \a s -> b1 a s >>= \case
-        Right (e1,a1) -> b2 a1 (eFun e1 s) >>= \case
-          Right (e2,a2) -> return . Right $ (e1 <> e2, a2)
-          Left x2 -> return (Left x2)
-        Left x1 -> return (Left x1)
+      r3 = r1 `meet` r2
+      b3 a = b1 a >>= b2
+  in Op r3 w3 p3 b3
 
 (*>>)
   :: (Monad m, Cap c)
-  => Op c e a1 m a2
-  -> Op c e a2 m a3
-  -> Op c e a1 m a3
-(*>>) = feeds
+  => Op c a1 m a2
+  -> Op c a2 m a3
+  -> Op c a1 m a3
+(*>>) = pipe
 
--- data Op c a
---   = Op { opRead :: c
---        , opWrite :: c
---        , opProduces :: c
---        , opBody :: a
---        }
+mkOp :: (Cap c) => c -> c -> (a -> m (CEffect c, b)) -> Op c a m b
+mkOp w p b = Op uniC w p $ \a -> OpBody . const $ (b a)
 
--- type Op' c a = Op c (OpBody' c a)
+liftOpM :: (Monad m, MonadTrans t) => Op c a m b -> Op c a (t m) b
+liftOpM = onOpM lift
 
--- type PreOp c a b = Op c (a -> OpBody' c b)
+onOpM :: (m1 (CEffect c,b) -> m2 (CEffect c,b)) -> Op c a m1 b -> Op c a m2 b
+onOpM g (Op c a m b) = Op c a m $ \a ->
+  let OpBody f = b a
+  in OpBody $ \s -> g (f s)
 
--- instance Functor (Op c) where
---   fmap f (Op r w p b) = Op r w p (f b)
+mapOp' :: (Functor m, Cap c) => (a -> m b) -> Op c a m b
+mapOp' f =
+  Op uniC idC idC $ \a -> OpBody . const $ (\b -> (idE, b)) <$> f a
 
--- instance (Cap c) => Applicative (Op c) where
---   pure a = Op uniC idC idC a
---   Op r1 w1 p1 b1 <*> Op r2 w2 p2 b2 = case (split w2 p1, split p1 w2) of
---     (Just w2',_) -> Op (r1 `meet` r2) (w1 <> w2') p2 (b1 b2)
---     (_,Just p1') -> Op (r1 `meet` r2) w1 (p1' <> p2) (b1 b2)
---     _ -> Op (r1 `meet` r2) (w1 <> w2) (p1 <> p2) (b1 b2)
+mapOp :: (Applicative m, Cap c) => (a -> b) -> Op c a m b
+mapOp f = mapOp' (pure . f)
 
--- opFail :: (Cap c) => Op' c a
--- opFail = Op uniC idC uniC opBFail
+feedTo :: (Monad m, Cap c) => a1 -> Op c a1 m b -> Op c a2 m b
+feedTo a o = pure a *>> o
 
--- opEffect :: (Cap c) => CEffect c -> Op' c ()
--- opEffect e = Op uniC (mincap e) (undo e) (opBEffect e)
+testOp :: (Monad m, Cap c) => Op c a m Bool -> Op c a (ExceptT () m) ()
+testOp o = liftOpM o *>> mapOp' (\b -> if b
+                                          then return ()
+                                          else throwError ())
 
--- opQuery :: (Cap c) => c -> Op' c (CState c)
--- opQuery c = Op c idC idC opBRead
+queryOp :: (Applicative m, Cap c) => c -> Op c a m (CState c)
+queryOp c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 
--- opTest
---   :: (Cap c)
---   => c
---   -> (CState c -> Bool)
---   -> Op' c ()
--- opTest c t = Op c idE idC (opBTest t)
+pairOp :: (Monad m, Cap c) => Op c a m b1 -> Op c a m b2 -> Op c a m (b1,b2)
+pairOp o1 o2 = (,) <$> o1 <*> o2
 
--- mkOp :: (Monoid c) => c -> c -> (s -> (e,a)) -> Op c (OpBody e s a)
--- mkOp r w f = Op r w idC (OpBody (Just . f))
+idOp :: (Applicative m, Cap c) => Op c a m a
+idOp = mapOp id
 
--- mkPre :: (Monoid c) => c -> c -> (a -> OpBody' c b) -> PreOp c a b
--- mkPre r w fo = Op r w idC fo
+effectOp :: (Applicative m, Cap c) => CEffect c -> Op c a m ()
+effectOp e = effectOp' e ()
 
--- (<*>=) :: (Applicative f, Monad g) => f (g a) -> f (a -> g b) -> f (g b)
--- (<*>=) m f = fmap (>>=) m <*> f
+effectOp' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
+effectOp' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
 
--- edLift :: Editor c1 c2 -> Op' c2 a -> Op' c1 a
--- edLift ed (Op r w p b) = Op
---   (readLift ed r)
---   (writeLift ed w)
---   (writeLift ed p)
---   (edLiftB ed b)
+edLift
+  :: (Monad m)
+  => Editor c1 c2
+  -> Op c2 a m b
+  -> Op c1 a (ExceptT () m) b
+edLift ed (Op r w p b) = Op
+  (readLift ed r)
+  (writeLift ed w)
+  (writeLift ed p)
+  (\a -> edLiftB ed (b a))
 
--- edLiftB :: Editor c1 c2 -> OpBody' c2 a -> OpBody' c1 a
--- edLiftB ed (OpBody f) = OpBody $ \s ->
---   case zoomState ed s >>= f of
---     Just (e,a) -> Just (effLift ed e, a)
---     Nothing -> Nothing
+edLift' :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
+edLift' ed (Op r w p b) = Op
+  (readLift ed r)
+  (writeLift ed w)
+  (writeLift ed p)
+  (\a -> edLiftB' ed (b a))
 
--- edLiftP :: Editor c1 c2 -> PreOp c2 a b -> PreOp c1 a b
--- edLiftP ed (Op r w p mf) = Op
---   (readLift ed r)
---   (writeLift ed w)
---   (writeLift ed p)
---   (edLiftB ed . mf)
+edLiftB
+  :: (Monad m)
+  => Editor c1 c2
+  -> OpBody c2 m a
+  -> OpBody c1 (ExceptT () m) a
+edLiftB ed (OpBody f) = OpBody $ \s -> case zoomState ed s of
+  Just s' -> do
+    (e,a) <- lift $ f s'
+    return (effLift ed e, a)
+  Nothing -> throwError ()
+
+edLiftB'
+  :: (Monad m)
+  => Editor c1 c2
+  -> OpBody c2 m a
+  -> OpBody c1 m a
+edLiftB' ed o =
+  let OpBody f = edLiftB ed o
+  in OpBody $ \s -> runExceptT (f s) >>= \case
+       Right a -> return a
+       Left () -> error "Unhandled editor zoomState failure."

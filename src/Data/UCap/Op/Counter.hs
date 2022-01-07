@@ -3,27 +3,42 @@ module Data.UCap.Op.Counter where
 import Data.UCap
 import Data.UCap.Op.Internal
 
-atLeast :: (Num n, Ord n) => n -> Op' (CounterC n) ()
-atLeast n = opTest
-  addAny
-  (>= n)
+import Control.Monad.Except
 
-atMost :: (Num n, Ord n) => n -> Op' (CounterC n) ()
-atMost n = opTest
-  subAny
-  (<= n)
+upperBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
+upperBound = queryOp subAny
 
-subOp :: (Num n, Ord n) => n -> Op' (CounterC n) n
-subOp amt = opEffect (subE amt) *> pure (pure amt)
+atMost :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
+atMost = pairOp idOp upperBound *>> mapOp (\(x,s) -> x >= s)
 
-preSub :: (Num n, Ord n) => PreOp (CounterC n) n n
-preSub = mkPre uniC subAny $ \n -> opBEffect (subE n) >> return n
+lowerBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
+lowerBound = queryOp addAny
 
-subGuard :: (Num n, Ord n) => n -> n -> Op' (CounterC n) n
-subGuard lim amt = atLeast lim *> subOp amt
+atLeast :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
+atLeast = pairOp idOp lowerBound *>> mapOp (\(x,s) -> x <= s)
 
-addOp :: (Num n, Ord n) => n -> Op' (CounterC n) n
-addOp amt = opEffect (addE amt) *> pure (pure amt)
+addOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) a m n
+addOp n = effectOp' (addE n) n
 
-preAdd :: (Num n, Ord n) => PreOp (CounterC n) n n
-preAdd = mkPre uniC addAny $ \n -> opBEffect (addE n) >> return n
+addOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) n m n
+addOp' = Op uniC addAny idC $ \n -> OpBody $ \_ -> pure (addE n, n)
+
+subOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) a m n
+subOp n = effectOp' (subE n) n
+
+subOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) n m ()
+subOp' = Op uniC subAny idC $ \n -> OpBody $ \_ -> pure (subE n, ())
+
+subGuard
+  :: (Monad m, Num n, Ord n)
+  => n
+  -> n
+  -> Op (CounterC n) a (ExceptT () m) n
+subGuard lim amt = testOp (lim `feedTo` atLeast) *> subOp amt
+
+addGuard
+  :: (Monad m, Num n, Ord n)
+  => n
+  -> n
+  -> Op (CounterC n) a (ExceptT () m) n
+addGuard lim amt = testOp (lim `feedTo` atMost) *> addOp amt

@@ -13,3 +13,11 @@ keyEd k = Editor
   (meetTo $ atMapC k)
   (plusTo $ atMapC k)
   (adjustE k)
+
+insertOp
+  :: (Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
+  => Op (MapC' k c) (k,CState c) m k
+insertOp = mkOp
+  insertAny
+  idC
+  (\(k,v) -> pure (insertE k v, k))
