@@ -38,7 +38,10 @@ instance (Monad m, Cap c) => Monad (OpBody c m) where
 
   In addition to reading the store value, the operation takes a
   "dynamic" argument of type @a@, which can affect the update and
-  return value, but cannot affect the capability requirements.
+  return value, but cannot affect the capability requirements.  This
+  allows operations to be chained together in a convenient way (using
+  '*>='), even though they do not have a 'Control.Monad.Monad'
+  instance.
 
   Operations are 'Applicative'.  The operation
   @'Control.Applicative.pure' a@ returns @a@ without reading or
@@ -75,14 +78,25 @@ pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
       b3 a = b1 a >>= b2
   in Op r3 w3 p3 b3
 
-{-| The '*>=' ("pipe") operator connects two operations together, so
-  that the return value of the first becomes the dynamic input of the
-  second.
+{-| The '*>=' operator connects two operations together, so that the
+  return value of the first becomes the dynamic input of the second.
+  Their effects run in left-to-right sequence. In @op1 '*>= op2@,
+  effects made by @op1@ will modify the store value that is read by
+  @op2@.
 
   The 'idOp' operation is an identity for '*>='.
 
 @
-(o *>= idOp) = (idOp *>= o) = o
+(o '*>=' 'idOp') = ('idOp' '*>=' o) = o
+@
+
+  '*>=' is closely related to the generic applicative
+  'Control.Applicative.*>' operator, which also sequences two
+  operations together but feeds '()' to the second operation rather
+  than the first's return value.
+
+@
+o1 '*>=' ('feedTo' '()' o2) = o1 '*>' o2
 @
 -}
 (*>=)
@@ -107,6 +121,13 @@ mapOp' :: (Functor m, Cap c) => (a -> m b) -> Op c a m b
 mapOp' f =
   Op uniC idC idC $ \a -> OpBody . const $ (\b -> (idE, b)) <$> f a
 
+{-| 'mapOp' simply returns the dynamic input after transforming it with
+  a function.
+
+@
+'mapOp' f = f 'Control.Functor.<$>' 'idOp'
+@
+-}
 mapOp :: (Applicative m, Cap c) => (a -> b) -> Op c a m b
 mapOp f = mapOp' (pure . f)
 
@@ -114,7 +135,9 @@ mapOp f = mapOp' (pure . f)
   operation can be run without piping any further input into it.
 
 @
-feedTo a o = pure a *>= o
+a `'feedTo'` o = 'pure' a '*>=' o
+
+a `'feedTo'` 'idOp' = 'pure' a
 @
 -}
 feedTo :: (Monad m, Cap c) => a1 -> Op c a1 m b -> Op c a2 m b
@@ -136,13 +159,14 @@ testOp o = liftOpM o *>= mapOp' (\b -> if b
   The relationship between the returned value and the actual store
   state depends on the @c@ argument given, so you should prefer to use
   more specific queries defined for particular store types, such as
-  'lowerBound' for 'Data.UCap.Counter.CounterC'. -}
+  'Data.UCap.Op.Counter.atLeast' for 'Data.UCap.Counter.CounterC'. -}
 queryOp :: (Applicative m, Cap c) => c -> Op c a m (CState c)
 queryOp c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 
 {-| @'pairOp' o1 o2@ runs operations @o1@ and @o2@ in sequence, giving
   them both the same dynamic input value.  Their results are collected
-  in a pair that is returned.
+  in a pair that is returned.  The effects of @o1@ are still visible
+  to @o2@.
 
 @
 'pure' 0 '*>=' ('mapOp' (+ 1) `'pairOp'` 'mapOp' (+ 2)) = 'pure' (1,2)
@@ -152,12 +176,19 @@ queryOp c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 pairOp :: (Monad m, Cap c) => Op c a m b1 -> Op c a m b2 -> Op c a m (b1,b2)
 pairOp o1 o2 = (,) <$> o1 <*> o2
 
+{-| The identity operation, which leaves the store untouched and simply
+  returns its dynamic input. -}
 idOp :: (Applicative m, Cap c) => Op c a m a
 idOp = mapOp id
 
+{-| Modify the store with a static effect.  Because the effect is
+  determined by a static argument (not based on the store state or a
+  dynamic input), the operation @'effectOp' e@ automatically has the
+  minimum write-requirement for the effect, @'mincap' e@. -}
 effectOp :: (Applicative m, Cap c) => CEffect c -> Op c a m ()
 effectOp e = effectOp' e ()
 
+{-| Same as 'effectOp', but takes a static return value as well. -}
 effectOp' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
 effectOp' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
 
@@ -172,6 +203,9 @@ edLift' ed (Op r w p b) = Op
   (writeLift ed p)
   (\a -> edLiftB' ed (b a))
 
+{-| Given state types @c1@ and @c2@, where @c2@ is a component of @c1@,
+  'edLift' transforms an operation on @c2@ into the equivalent @c1@
+  operation which leaves the other components untouched. -}
 edLift :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
 edLift ed (Op r w p b) = Op
   (readLift ed r)

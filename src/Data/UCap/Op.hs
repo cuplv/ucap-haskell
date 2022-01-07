@@ -12,6 +12,7 @@ module Data.UCap.Op
   , feedTo
   , mapOp
   , mapOp'
+  , pairOp
   , testOp
   -- * Lifting Operations
   , Editor
