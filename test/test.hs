@@ -6,6 +6,7 @@ import Test.Tasty.HUnit
 import Data.UCapTests (testUCap)
 import Data.UCap.InfMapTests (testInfMap)
 import Data.UCap.MapTests (testMap)
+import Data.UCap.OpTests (testOp)
 
 main = defaultMain tests
 
@@ -14,4 +15,5 @@ tests = testGroup "Tests"
   [ testInfMap
   , testUCap
   , testMap
+  , testOp
   ]

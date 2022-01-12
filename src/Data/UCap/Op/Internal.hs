@@ -135,24 +135,24 @@ mapOp f = mapOp' (pure . f)
   operation can be run without piping any further input into it.
 
 @
-a `'feedTo'` o = 'pure' a '*>=' o
+a `'withInput'` o = 'pure' a '*>=' o
 
-a `'feedTo'` 'idOp' = 'pure' a
+a `'withInput'` 'idOp' = 'pure' a
 @
 -}
-feedTo :: (Monad m, Cap c) => a1 -> Op c a1 m b -> Op c a2 m b
-feedTo a o = pure a *>= o
+withInput :: (Monad m, Cap c) => a1 -> Op c a1 m b -> Op c a2 m b
+withInput a o = pure a *>= o
 
 {-| Turn an operation returning 'Bool' into one which fails (using the
   'Control.Monad.Except.ExceptT' monad transformer) when it would have
   returned 'False'.  This is useful for defining assertions that
   should cancel an operation when they don't hold. -}
-testOp :: (Monad m, Cap c) => Op c a m Bool -> Op c a (ExceptT () m) ()
-testOp o = liftOpM o *>= mapOp' (\b -> if b
-                                           then return ()
-                                           else throwError ())
+assert :: (Monad m, Cap c) => Op c a m Bool -> Op c a (ExceptT () m) ()
+assert o = liftOpM o *>= mapOp' (\b -> if b
+                                          then return ()
+                                          else throwError ())
 
-{-| @'queryOp' c@ observes the store state, using @c@ as a
+{-| @'query' c@ observes the store state, using @c@ as a
   read-requirement to restrict remote interference, and returns the
   read value.
     
@@ -160,8 +160,8 @@ testOp o = liftOpM o *>= mapOp' (\b -> if b
   state depends on the @c@ argument given, so you should prefer to use
   more specific queries defined for particular store types, such as
   'Data.UCap.Op.Counter.atLeast' for 'Data.UCap.Counter.CounterC'. -}
-queryOp :: (Applicative m, Cap c) => c -> Op c a m (CState c)
-queryOp c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
+query :: (Applicative m, Cap c) => c -> Op c a m (CState c)
+query c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 
 {-| @'pairOp' o1 o2@ runs operations @o1@ and @o2@ in sequence, giving
   them both the same dynamic input value.  Their results are collected
@@ -183,21 +183,25 @@ idOp = mapOp id
 
 {-| Modify the store with a static effect.  Because the effect is
   determined by a static argument (not based on the store state or a
-  dynamic input), the operation @'effectOp' e@ automatically has the
-  minimum write-requirement for the effect, @'mincap' e@. -}
-effectOp :: (Applicative m, Cap c) => CEffect c -> Op c a m ()
-effectOp e = effectOp' e ()
+  dynamic input), the operation @'effect' e@ automatically has the
+  minimum write-requirement for the effect, @'mincap' e@.
 
-{-| Same as 'effectOp', but takes a static return value as well. -}
-effectOp' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
-effectOp' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
+  'effect' passes its input on as the return value.
+-}
+effect :: (Applicative m, Cap c) => CEffect c -> Op c a m a
+effect e = mkOp (mincap e) (undo e) $ \a -> pure (e,a)
+-- effect e = effect' e ()
 
-edLift'
+{-| Same as 'effect', but takes a static return value as well. -}
+effect' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
+effect' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
+
+overEd'
   :: (Monad m)
   => Editor c1 c2
   -> Op c2 a m b
   -> Op c1 a (ExceptT () m) b
-edLift' ed (Op r w p b) = Op
+overEd' ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
   (writeLift ed p)
@@ -206,8 +210,8 @@ edLift' ed (Op r w p b) = Op
 {-| Given state types @c1@ and @c2@, where @c2@ is a component of @c1@,
   'edLift' transforms an operation on @c2@ into the equivalent @c1@
   operation which leaves the other components untouched. -}
-edLift :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
-edLift ed (Op r w p b) = Op
+overEd :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
+overEd ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
   (writeLift ed p)
@@ -234,3 +238,17 @@ edLiftB ed o =
   in OpBody $ \s -> runExceptT (f s) >>= \case
        Right a -> return a
        Left () -> error "Unhandled editor zoomState failure."
+
+data Caps c
+  = Caps { capsRead :: c
+         , capsWrite :: c
+         }
+
+emptyCaps :: (Cap c) => Caps c
+emptyCaps = Caps uniC idC
+
+fullCaps :: (Cap c) => Caps c
+fullCaps = Caps idC uniC
+
+(^#) :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
+(^#) = overEd

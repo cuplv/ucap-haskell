@@ -29,6 +29,13 @@ testCounter = testGroup "CounterC"
      \s -> eFun (subE 2476 <> mulE 4) (s :: Int) == (s - 2476) * 4
   ,QC.testProperty "mul-sub" $
      \s -> eFun (mulE 7 <> subE 34) (s :: Int) == (s * 7) - 34
+  ,testCase "simple" $
+     ((mincap (addE 3) :: CounterC Int)
+      <=? (mincap (addE 1) <> mincap (addE 2)))
+     @?= True
+  ,testCase "simple2" $
+     ((mincap (addE 3) :: CounterC Int) <=? addC 3)
+     @?= True
   ]
 
 testConst = testGroup "ConstC"

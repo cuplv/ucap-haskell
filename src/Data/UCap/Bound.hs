@@ -116,7 +116,7 @@ instance (Ord n) => BMeet (MulBound n) where
 
 instance (Num n, Ord n) => Split (MulBound n) where
   split (MulBounded n1) (MulBounded n2)
-    | n1 <= n2 = Just $ MulBounded (n1 - n2)
+    | n1 >= n2 = Just $ MulBounded n1 -- TODO
     | otherwise = Nothing
   split (MulBounded _) MulInfinite = Nothing
   split MulInfinite _ = Just MulInfinite
