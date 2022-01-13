@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Counter 
+module UCap.Domain.Num
   ( CounterE
   , addE
   , subE
@@ -23,9 +23,9 @@ module Data.UCap.Counter
 import Data.Aeson
 import GHC.Generics
 
-import Data.UCap.Bound
-import Data.UCap.Classes
-import Data.UCap.Const
+import Data.InfNum
+import UCap.Domain.Classes
+import UCap.Domain.Const
 
 {-| 'CounterE' provides addition, subtraction, and (positive)
   multiplication effects on 'Num' values.

@@ -1,9 +1,9 @@
-module Data.UCap.InfMapTests (testInfMap) where
+module Data.InfMapTests (testInfMap) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.UCap.InfMap (InfMap)
-import qualified Data.UCap.InfMap as IM
+import Data.InfMap (InfMap)
+import qualified Data.InfMap as IM
 
 import Test.Tasty
 import Test.Tasty.QuickCheck as QC

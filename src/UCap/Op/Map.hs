@@ -1,14 +1,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Data.UCap.Op.Map where
+module UCap.Op.Map where
 
-import Data.UCap
-import Data.UCap.Editor
-import Data.UCap.Lens
-import Data.UCap.Op.Internal
+import UCap.Domain
+import UCap.Lifter
+import UCap.Lens
+import UCap.Op.Internal
 
-keyEd :: (Cap c, Ord k, Ord (CState c)) => k -> Editor (MapC' k c) c
-keyEd k = Editor
+keyLf :: (Cap c, Ord k, Ord (CState c)) => k -> Lifter (MapC' k c) c
+keyLf k = Lifter
   (^. at k)
   (meetTo $ atMapC k)
   (plusTo $ atMapC k)

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Op
+module UCap.Op
   (
   -- * Operations
     Op
@@ -16,30 +16,30 @@ module Data.UCap.Op
   , mapOp'
   , pairOp
   , assert
-  -- * Editors
-  , Editor
+  -- * Lifters
+  , Lifter
   , (>:)
   , (^#)
-  , overEd
-  , overEd'
+  , overLf
+  , overLf'
   , _1ed
   , _2ed
   , _3ed
   , _4ed
-  -- * Operations for Counter
-  , module Data.UCap.Op.Counter
-  -- * Editors for Either
-  , module Data.UCap.Op.Either
-  -- * Operations and Editors for Map
-  , module Data.UCap.Op.Map
+  -- * Operations for 'Data.Num' types
+  , module UCap.Op.Num
+  -- * Lifters for 'Data.Either.Either'
+  , module UCap.Op.Either
+  -- * Operations and Lifters for 'Data.Map.Map'
+  , module UCap.Op.Map
   ) where
 
-import Data.UCap
-import Data.UCap.Editor
-import Data.UCap.Op.Counter
-import Data.UCap.Op.Either
-import Data.UCap.Op.Internal
-import Data.UCap.Op.Map
+import UCap.Domain
+import UCap.Lifter
+import UCap.Op.Either
+import UCap.Op.Internal
+import UCap.Op.Map
+import UCap.Op.Num
 
 -- | Evaluate a simple operation, which does not interact with a
 -- replicated state, to its return value.

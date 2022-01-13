@@ -1,8 +1,8 @@
-module Data.UCap.OpTests (testOp) where
+module UCap.OpTests (testOp) where
 
-import Data.UCap
-import Data.UCap.Lens
-import Data.UCap.Op
+import UCap.Domain
+import UCap.Lens
+import UCap.Op
 
 import Data.Functor.Identity (Identity)
 import Test.Tasty

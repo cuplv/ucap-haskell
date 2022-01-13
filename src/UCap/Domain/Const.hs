@@ -2,11 +2,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Data.UCap.Const where
+module UCap.Domain.Const where
 
-import Data.UCap.Classes
-import Data.UCap.InfSet (InfSet)
-import qualified Data.UCap.InfSet as IS
+import UCap.Domain.Classes
+import Data.InfSet (InfSet)
+import qualified Data.InfSet as IS
 
 import Data.Aeson
 import GHC.Generics

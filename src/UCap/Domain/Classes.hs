@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Data.UCap.Classes
+module UCap.Domain.Classes
   ( Cap (..)
   , idC
   , uniC

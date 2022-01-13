@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Data.UCap.InfMap
+module Data.InfMap
   ( InfMap
   , uniform
   , fromList
@@ -9,17 +9,17 @@ module Data.UCap.InfMap
   , insert
   , adjust
   , revert
-  , Data.UCap.InfMap.lookup
+  , Data.InfMap.lookup
   , union
   , unionWith
   , unionWithA
-  , Data.UCap.InfMap.map
+  , Data.InfMap.map
   , toList
   , toMap
-  , Data.UCap.InfMap.at
+  , Data.InfMap.at
   ) where
 
-import Data.UCap.Classes
+import UCap.Domain.Classes
 
 import Data.Aeson
 import Data.Map (Map)
@@ -127,9 +127,9 @@ compareWith
   -> InfMap k v
   -> InfMap k v
   -> Bool
-compareWith f m1 m2 = Data.UCap.InfMap.and (unionWith f m1 m2)
+compareWith f m1 m2 = Data.InfMap.and (unionWith f m1 m2)
 
 at :: (Ord k) => k -> Lens' (InfMap k v) v
 at k = lens get set
-  where get = Data.UCap.InfMap.lookup k
+  where get = Data.InfMap.lookup k
         set s b = insert k b s

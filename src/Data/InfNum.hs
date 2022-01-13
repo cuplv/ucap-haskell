@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Data.UCap.Bound
+module Data.InfNum
   ( AddBound
   , addB
   , addFun
@@ -11,7 +11,7 @@ module Data.UCap.Bound
   , mulId
   ) where
 
-import Data.UCap.Classes
+import UCap.Domain.Classes
 
 import Data.Aeson
 import GHC.Generics

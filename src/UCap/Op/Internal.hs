@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Op.Internal where
+module UCap.Op.Internal where
 
-import Data.UCap.Classes
-import Data.UCap.Editor
+import UCap.Domain.Classes
+import UCap.Lifter
 
 import Control.Monad.Except
 
@@ -196,12 +196,12 @@ effect e = mkOp (mincap e) (undo e) $ \a -> pure (e,a)
 effect' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
 effect' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
 
-overEd'
+overLf'
   :: (Monad m)
-  => Editor c1 c2
+  => Lifter c1 c2
   -> Op c2 a m b
   -> Op c1 a (ExceptT () m) b
-overEd' ed (Op r w p b) = Op
+overLf' ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
   (writeLift ed p)
@@ -210,8 +210,8 @@ overEd' ed (Op r w p b) = Op
 {-| Given state types @c1@ and @c2@, where @c2@ is a component of @c1@,
   'edLift' transforms an operation on @c2@ into the equivalent @c1@
   operation which leaves the other components untouched. -}
-overEd :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
-overEd ed (Op r w p b) = Op
+overLf :: (Monad m) => Lifter c1 c2 -> Op c2 a m b -> Op c1 a m b
+overLf ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
   (writeLift ed p)
@@ -219,7 +219,7 @@ overEd ed (Op r w p b) = Op
 
 edLiftB'
   :: (Monad m)
-  => Editor c1 c2
+  => Lifter c1 c2
   -> OpBody c2 m a
   -> OpBody c1 (ExceptT () m) a
 edLiftB' ed (OpBody f) = OpBody $ \s -> case zoomState ed s of
@@ -230,7 +230,7 @@ edLiftB' ed (OpBody f) = OpBody $ \s -> case zoomState ed s of
 
 edLiftB
   :: (Monad m)
-  => Editor c1 c2
+  => Lifter c1 c2
   -> OpBody c2 m a
   -> OpBody c1 m a
 edLiftB ed o =
@@ -250,5 +250,5 @@ emptyCaps = Caps uniC idC
 fullCaps :: (Cap c) => Caps c
 fullCaps = Caps idC uniC
 
-(^#) :: (Monad m) => Editor c1 c2 -> Op c2 a m b -> Op c1 a m b
-(^#) = overEd
+(^#) :: (Monad m) => Lifter c1 c2 -> Op c2 a m b -> Op c1 a m b
+(^#) = overLf

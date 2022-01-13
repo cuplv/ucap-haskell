@@ -1,6 +1,6 @@
-module Data.UCapTests (testUCap) where
+module UCapTests (testUCap) where
 
-import Data.UCap
+import UCap.Domain
 
 import qualified Data.Map as Map
 import Test.Tasty

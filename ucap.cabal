@@ -8,24 +8,24 @@ author:             octalsrc
 maintainer:         nicklewchenko92@gmail.com
 
 library
-    exposed-modules:  Data.UCap
-                    , Data.UCap.Bound
-                    , Data.UCap.Editor
-                    , Data.UCap.InfMap
-                    , Data.UCap.InfSet
-                    , Data.UCap.Lens
-                    , Data.UCap.Op
-    other-modules:    Data.UCap.Classes
-                    , Data.UCap.Const
-                    , Data.UCap.Counter
-                    , Data.UCap.Either
-                    , Data.UCap.Identity
-                    , Data.UCap.Map
-                    , Data.UCap.Op.Internal
-                    , Data.UCap.Op.Internal.Context
-                    , Data.UCap.Op.Counter
-                    , Data.UCap.Op.Either
-                    , Data.UCap.Op.Map
+    exposed-modules:  Data.InfNum
+                    , Data.InfMap
+                    , Data.InfSet
+                    , UCap
+                    , UCap.Domain
+                    , UCap.Lens
+                    , UCap.Lifter
+                    , UCap.Op
+    other-modules:    UCap.Domain.Classes
+                    , UCap.Domain.Const
+                    , UCap.Domain.Either
+                    , UCap.Domain.Identity
+                    , UCap.Domain.Map
+                    , UCap.Domain.Num
+                    , UCap.Op.Internal
+                    , UCap.Op.Num
+                    , UCap.Op.Either
+                    , UCap.Op.Map
     build-depends:    base ^>=4.14.3.0
                     , containers
                     , aeson
@@ -39,10 +39,10 @@ test-suite test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          test.hs
-    other-modules:    Data.UCapTests
-                    , Data.UCap.InfMapTests
-                    , Data.UCap.MapTests
-                    , Data.UCap.OpTests
+    other-modules:    Data.InfMapTests
+                    , UCapTests
+                    , UCap.MapTests
+                    , UCap.OpTests
     build-depends:    base ^>=4.14.3.0
                     , containers
                     , mtl

@@ -1,6 +1,6 @@
-module Data.UCap.MapTests (testMap) where
+module UCap.MapTests (testMap) where
 
-import Data.UCap
+import UCap.Domain
 
 import Control.Monad.Writer
 import Data.Map (Map)

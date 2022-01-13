@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Data.UCap.InfSet
+module Data.InfSet
   ( InfSet
   , empty
   , singleton
@@ -14,7 +14,7 @@ module Data.UCap.InfSet
   , intersection
   ) where
 
-import Data.UCap.Classes
+import UCap.Domain.Classes
 
 import Data.Aeson
 import Data.Set (Set)

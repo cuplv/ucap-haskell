@@ -1,17 +1,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Data.UCap.Op.Either where
+module UCap.Op.Either where
 
-import Data.UCap
-import Data.UCap.Editor
-import Data.UCap.Lens
-import Data.UCap.Op.Internal
+import UCap.Domain
+import UCap.Lifter
+import UCap.Lens
+import UCap.Op.Internal
 
-rightEd
+rightLf
   :: (Cap c1, Cap c2, Ord (CState c1), Ord (CState c2))
-  => Editor (EitherC' c1 c2) c2
-rightEd = Editor
+  => Lifter (EitherC' c1 c2) c2
+rightLf = Lifter
   (\case
       Right s -> Just s
       Left _ -> Nothing)
@@ -19,10 +19,10 @@ rightEd = Editor
   (plusTo $ atR)
   (\e -> OverLR idE e)
 
-leftEd 
+leftLf 
   :: (Cap c1, Cap c2, Ord (CState c1), Ord (CState c2))
-  => Editor (EitherC' c1 c2) c1
-leftEd = Editor
+  => Lifter (EitherC' c1 c2) c1
+leftLf = Lifter
   (\case
       Right _ -> Nothing
       Left s -> Just s)

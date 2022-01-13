@@ -1,7 +1,7 @@
-module Data.UCap.Op.Counter where
+module UCap.Op.Num where
 
-import Data.UCap
-import Data.UCap.Op.Internal
+import UCap.Domain
+import UCap.Op.Internal
 
 import Control.Monad.Except
 

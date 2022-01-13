@@ -1,9 +1,9 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Identity where
+module UCap.Domain.Identity where
 
-import Data.UCap.Classes
+import UCap.Domain.Classes
 
 import Data.Aeson
 import GHC.Generics

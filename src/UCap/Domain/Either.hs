@@ -2,11 +2,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.UCap.Either where
+module UCap.Domain.Either where
 
-import Data.UCap.Classes
-import Data.UCap.Const
-import Data.UCap.Lens
+import UCap.Domain.Classes
+import UCap.Domain.Const
+import UCap.Lens
 
 import Data.Aeson
 import GHC.Generics

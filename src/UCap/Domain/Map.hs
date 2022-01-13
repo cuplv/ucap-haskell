@@ -4,17 +4,17 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Data.UCap.Map where
+module UCap.Domain.Map where
 
-import Data.UCap.Classes
-import Data.UCap.Const
-import Data.UCap.Either
-import Data.UCap.Identity
-import Data.UCap.InfMap (InfMap)
-import qualified Data.UCap.InfMap as IM
-import Data.UCap.InfSet (InfSet)
-import qualified Data.UCap.InfSet as IS
-import Data.UCap.Lens
+import Data.InfMap (InfMap)
+import qualified Data.InfMap as IM
+import Data.InfSet (InfSet)
+import qualified Data.InfSet as IS
+import UCap.Domain.Classes
+import UCap.Domain.Const
+import UCap.Domain.Either
+import UCap.Domain.Identity
+import UCap.Lens
 
 import Data.Aeson
 import Data.Map (Map)

@@ -1,11 +1,11 @@
-module Data.UCap.Lens
+module UCap.Lens
   ( module Lens.Micro.GHC
   , (/\~)
   , meetTo
   , plusTo
   ) where
 
-import Data.UCap.Classes (Meet (..), BMeet (..))
+import UCap.Domain.Classes (Meet (..), BMeet (..))
 
 import Lens.Micro.GHC
 
