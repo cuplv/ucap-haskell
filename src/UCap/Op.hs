@@ -16,6 +16,9 @@ module UCap.Op
   , mapOp'
   , pairOp
   , assert
+  , Caps (..)
+  , emptyCaps
+  , fullCaps
   -- * Lifters
   , Lifter
   , (>:)

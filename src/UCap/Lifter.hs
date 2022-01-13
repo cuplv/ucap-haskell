@@ -5,6 +5,10 @@ module UCap.Lifter where
 
 import UCap.Domain.Classes
 
+{- | A 'Lifter' transforms an operation on a small part of a state, such
+   as one element of a tuple, into an equivalent operation on the
+   whole state.
+-}
 data Lifter c1 c2
   = Lifter { zoomState :: CState c1 -> Maybe (CState c2)
            , readLift :: c2 -> c1
@@ -19,9 +23,13 @@ compLf (Lifter z1 r1 w1 e1) (Lifter z2 r2 w2 e2) = Lifter
   (w1 . w2)
   (e1 . e2)
 
+-- | The identity lifter.
 idLf :: Lifter c c
 idLf = Lifter pure id id id
 
+{- | Compose two lifters.  As an example, for state type @(A, B, (C,
+   D))@, the lifter @'_3ed' '>:' '_1ed'@ targets the @C@ field.
+-}
 (>:) :: Lifter c1 c2 -> Lifter c2 c3 -> Lifter c1 c3
 (>:) = compLf
 

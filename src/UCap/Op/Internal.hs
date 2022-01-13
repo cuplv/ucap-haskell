@@ -80,7 +80,7 @@ pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
 
 {-| The '*>=' operator connects two operations together, so that the
   return value of the first becomes the dynamic input of the second.
-  Their effects run in left-to-right sequence. In @op1 '*>= op2@,
+  Their effects run in left-to-right sequence. In @op1 '*>=' op2@,
   effects made by @op1@ will modify the store value that is read by
   @op2@.
 
@@ -92,11 +92,11 @@ pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
 
   '*>=' is closely related to the generic applicative
   'Control.Applicative.*>' operator, which also sequences two
-  operations together but feeds '()' to the second operation rather
-  than the first's return value.
+  operations together but feeds the same outer input value to both,
+  discarding the return value of the first.
 
 @
-o1 '*>=' ('feedTo' '()' o2) = o1 '*>' o2
+('withInput' a o1) '*>=' ('withInput' a o2) = withInput a (o1 '*>' o2)
 @
 -}
 (*>=)
@@ -239,16 +239,25 @@ edLiftB ed o =
        Right a -> return a
        Left () -> error "Unhandled editor zoomState failure."
 
+-- | A pair of read-capability and write-capability.
 data Caps c
   = Caps { capsRead :: c
          , capsWrite :: c
          }
 
+-- | An empty capability pair, allowing any concurrent update by remote operations and allowing no local update.
 emptyCaps :: (Cap c) => Caps c
 emptyCaps = Caps uniC idC
 
+-- | A full capability pair, allowing no concurrent updates (a fully-consistent read) and allowing any local update.
 fullCaps :: (Cap c) => Caps c
 fullCaps = Caps idC uniC
 
+{- | Infix version of 'overLf'.
+
+@
+'UCap.Lifter._1ed' ^# op1 = overLf 'UCap.Lifter._1ed' op1
+@
+-}
 (^#) :: (Monad m) => Lifter c1 c2 -> Op c2 a m b -> Op c1 a m b
 (^#) = overLf
