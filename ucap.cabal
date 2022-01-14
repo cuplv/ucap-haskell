@@ -11,11 +11,13 @@ library
     exposed-modules:  Data.InfNum
                     , Data.InfMap
                     , Data.InfSet
+                    , Data.VClock
                     , UCap
                     , UCap.Domain
                     , UCap.Lens
                     , UCap.Lifter
                     , UCap.Op
+                    , UCap.Replica
     other-modules:    UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
@@ -40,6 +42,7 @@ test-suite test
     hs-source-dirs:   test
     main-is:          test.hs
     other-modules:    Data.InfMapTests
+                    , Data.VClockTests
                     , UCapTests
                     , UCap.MapTests
                     , UCap.OpTests
