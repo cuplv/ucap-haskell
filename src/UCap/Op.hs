@@ -7,13 +7,15 @@ module UCap.Op
   , evalOp
   , execOp
   , execWith
-  , (*>=)
+  , pipe
+  , (>>>)
+  , (<<<)
   , idOp
   , query
   , effect
   , withInput
   , mapOp
-  , mapOp'
+  , actionOp
   , pairOp
   , assert
   , Caps (..)
@@ -43,6 +45,8 @@ import UCap.Op.Either
 import UCap.Op.Internal
 import UCap.Op.Map
 import UCap.Op.Num
+
+import Control.Arrow ((>>>),(<<<))
 
 -- | Evaluate a simple operation, which does not interact with a
 -- replicated state, to its return value.

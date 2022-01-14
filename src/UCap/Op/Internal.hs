@@ -6,6 +6,10 @@ module UCap.Op.Internal where
 import UCap.Domain.Classes
 import UCap.Lifter
 
+import Prelude hiding (id,(.))
+
+import Control.Arrow
+import Control.Category
 import Control.Monad.Except
 
 {-| An @'OpBody' c m a'@ is an operation kernel, which produces an
@@ -40,12 +44,17 @@ instance (Monad m, Cap c) => Monad (OpBody c m) where
   "dynamic" argument of type @a@, which can affect the update and
   return value, but cannot affect the capability requirements.  This
   allows operations to be chained together in a convenient way (using
-  '*>='), even though they do not have a 'Control.Monad.Monad'
-  instance.
+  'pipe' or 'Control.Arrow.>>>'), even though they do not have a
+  'Control.Monad.Monad' instance.
 
   Operations are 'Applicative'.  The operation
   @'Control.Applicative.pure' a@ returns @a@ without reading or
   modifying the store state.
+
+  Operations also implement 'Control.Arrrow.Arrow', so they can be
+  composed using the other arrow combinators (such as
+  'Control.Arrrow.<<<' and 'Control.Arrow.***') in addition to
+  'Control.Arrow.>>>'.
 -}
 data Op c m a b
   = Op { opRead :: c
@@ -64,12 +73,21 @@ instance (Monad m, Cap c) => Applicative (Op c m a) where
     (Op r1 w1 p1 $ \a -> (\f -> (a,f)) <$> b1 a)
     (Op r2 w2 p2 $ \(a,f) -> f <$> b2 a)
 
-pipe
+instance (Monad m, Cap c) => Category (Op c m) where
+  id = idOp
+  (.) = flip pipe
+
+instance (Monad m, Cap c) => Arrow (Op c m) where
+  arr = mapOp
+  first o = pairOp (mapOp fst `pipe` o) (mapOp snd)
+  second o = pairOp (mapOp fst) (mapOp snd `pipe` o)
+
+pipeRL
   :: (Monad m, Cap c)
-  => Op c m a1 a2
-  -> Op c m a2 a3
+  => Op c m a2 a3
+  -> Op c m a1 a2
   -> Op c m a1 a3
-pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
+pipeRL (Op r2 w2 p2 b2) (Op r1 w1 p1 b1) =
   let (w3,p3) = case (split w2 p1, split p1 w2) of
                   (Just w2',_) -> (w1 <> w2', p2)
                   (_,Just p1') -> (w1, p1' <> p2)
@@ -78,33 +96,34 @@ pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
       b3 a = b1 a >>= b2
   in Op r3 w3 p3 b3
 
-{-| The '*>=' operator connects two operations together, so that the
+{-| The 'pipe' combinator connects two operations together, so that the
   return value of the first becomes the dynamic input of the second.
-  Their effects run in left-to-right sequence. In @op1 '*>=' op2@,
+  Their effects run in left-to-right sequence. In @'pipe' op1 op2@,
   effects made by @op1@ will modify the store value that is read by
-  @op2@.
+  @op2@.  'pipe' is a synonym for the '>>>' arrow operator, which most
+  examples will use.
 
-  The 'idOp' operation is an identity for '*>='.
+  The 'idOp' operation is an identity for 'pipe'/'>>>'.
 
 @
-(o '*>=' 'idOp') = ('idOp' '*>=' o) = o
+(o '>>>' 'idOp') = ('idOp' '>>>' o) = o
 @
 
-  '*>=' is closely related to the generic applicative
+  '>>>' is closely related to the generic applicative
   'Control.Applicative.*>' operator, which also sequences two
   operations together but feeds the same outer input value to both,
   discarding the return value of the first.
 
 @
-('withInput' a o1) '*>=' ('withInput' a o2) = withInput a (o1 '*>' o2)
+('withInput' a o1) '>>>' ('withInput' a o2) = withInput a (o1 '*>' o2)
 @
 -}
-(*>=)
+pipe
   :: (Monad m, Cap c)
   => Op c m a1 a2
   -> Op c m a2 a3
   -> Op c m a1 a3
-(*>=) = pipe
+pipe = flip pipeRL
 
 mkOp :: (Cap c) => c -> c -> (a -> m (CEffect c, b)) -> Op c m a b
 mkOp w p b = Op uniC w p $ \a -> OpBody . const $ (b a)
@@ -117,40 +136,51 @@ onOpM g (Op c m a b) = Op c a m $ \a ->
   let OpBody f = b a
   in OpBody $ \s -> g (f s)
 
-mapOp' :: (Functor m, Cap c) => (a -> m b) -> Op c m a b
-mapOp' f =
+{-| 'actionOp' runs an action in the underlying monad, using the output
+  as the operation's output.  Like 'mapOp', 'action' leaves the store
+  state untouched.
+
+  For example, the following operation prints the current state of the
+  store and returns @()@.
+
+@
+'query' 'uniC' '>>>' 'actionOp' 'print'
+@
+-}
+actionOp :: (Functor m, Cap c) => (a -> m b) -> Op c m a b
+actionOp f =
   Op uniC idC idC $ \a -> OpBody . const $ (\b -> (idE, b)) <$> f a
 
 {-| 'mapOp' simply returns the dynamic input after transforming it with
-  a function.
+  a function.  This is a synonym for 'Control.Arrow.arr'.
 
 @
 'mapOp' f = f 'Control.Functor.<$>' 'idOp'
 @
 -}
 mapOp :: (Applicative m, Cap c) => (a -> b) -> Op c m a b
-mapOp f = mapOp' (pure . f)
+mapOp f = actionOp (pure . f)
 
 {-| Statically fill in the dynamic input of an operation.  The resulting
   operation can be run without piping any further input into it.
 
 @
-a `'withInput'` o = 'pure' a '*>=' o
+a `'withInput'` o = 'pure' a '>>>' o
 
 a `'withInput'` 'idOp' = 'pure' a
 @
 -}
 withInput :: (Monad m, Cap c) => a1 -> Op c m a1 b -> Op c m a2 b
-withInput a o = pure a *>= o
+withInput a o = pure a >>> o
 
 {-| Turn an operation returning 'Bool' into one which fails (using the
   'Control.Monad.Except.ExceptT' monad transformer) when it would have
   returned 'False'.  This is useful for defining assertions that
   should cancel an operation when they don't hold. -}
 assert :: (Monad m, Cap c) => Op c m a Bool -> Op c (ExceptT () m) a ()
-assert o = liftOpM o *>= mapOp' (\b -> if b
-                                          then return ()
-                                          else throwError ())
+assert o = liftOpM o >>> actionOp (\b -> if b
+                                            then return ()
+                                            else throwError ())
 
 {-| @'query' c@ observes the store state, using @c@ as a
   read-requirement to restrict remote interference, and returns the
@@ -168,8 +198,10 @@ query c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
   in a pair that is returned.  The effects of @o1@ are still visible
   to @o2@.
 
+  This is a synonym for the 'Control.Arrrow.&&&' arrow operator.
+
 @
-'pure' 0 '*>=' ('mapOp' (+ 1) `'pairOp'` 'mapOp' (+ 2)) = 'pure' (1,2)
+'pure' 0 '>>>' ('mapOp' (+ 1) `'pairOp'` 'mapOp' (+ 2)) = 'pure' (1,2)
 @
 
 -}
@@ -190,7 +222,6 @@ idOp = mapOp id
 -}
 effect :: (Applicative m, Cap c) => CEffect c -> Op c m a a
 effect e = mkOp (mincap e) (undo e) $ \a -> pure (e,a)
--- effect e = effect' e ()
 
 {-| Same as 'effect', but takes a static return value as well. -}
 effect' :: (Applicative m, Cap c) => CEffect c -> b -> Op c m a b
