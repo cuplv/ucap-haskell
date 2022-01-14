@@ -46,7 +46,7 @@ import UCap.Op.Num
 
 -- | Evaluate a simple operation, which does not interact with a
 -- replicated state, to its return value.
-evalOp :: (Functor m) => Op (IdentityC ()) () m b -> m b
+evalOp :: (Functor m) => Op (IdentityC ()) m () b -> m b
 evalOp o = case execWith fullCaps () o of
   Just m -> (\(_,_,b) -> b) <$> m
 
@@ -55,7 +55,7 @@ evalOp o = case execWith fullCaps () o of
 execOp
   :: (Functor m, Cap c)
   => CState c
-  -> Op c () m b
+  -> Op c m () b
   -> m (CState c, b)
 execOp s o = case execWith fullCaps s o of
   Just m -> (\(_,e,b) -> (eFun e s, b)) <$> m
@@ -70,7 +70,7 @@ execWith
   :: (Functor m, Cap c)
   => Caps c
   -> CState c
-  -> Op c () m b
+  -> Op c m () b
   -> Maybe (m (Caps c, CEffect c, b))
 execWith (Caps cr cw) s (Op r w p b) = case b () of
   OpBody f -> case split cw w of

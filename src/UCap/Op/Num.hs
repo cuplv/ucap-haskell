@@ -5,40 +5,40 @@ import UCap.Op.Internal
 
 import Control.Monad.Except
 
-upperBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
+upperBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) m a n
 upperBound = query subAny
 
-atMost :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
+atMost :: (Monad m, Num n, Ord n) => Op (CounterC n) m n Bool
 atMost = pairOp idOp upperBound *>= mapOp (\(x,s) -> x >= s)
 
-lowerBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) a m n
+lowerBound :: (Applicative m, Num n, Ord n) => Op (CounterC n) m a n
 lowerBound = query addAny
 
-atLeast :: (Monad m, Num n, Ord n) => Op (CounterC n) n m Bool
+atLeast :: (Monad m, Num n, Ord n) => Op (CounterC n) m n Bool
 atLeast = pairOp idOp lowerBound *>= mapOp (\(x,s) -> x <= s)
 
-addOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) a m n
+addOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) m a n
 addOp n = effect' (addE n) n
 
-addOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) n m n
+addOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) m n n
 addOp' = Op uniC addAny idC $ \n -> OpBody $ \_ -> pure (addE n, n)
 
-subOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) a m n
+subOp :: (Applicative m, Num n, Ord n) => n -> Op (CounterC n) m a n
 subOp n = effect' (subE n) n
 
-subOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) n m ()
+subOp' :: (Applicative m, Num n, Ord n) => Op (CounterC n) m n ()
 subOp' = Op uniC subAny idC $ \n -> OpBody $ \_ -> pure (subE n, ())
 
 subGuard
   :: (Monad m, Num n, Ord n)
   => n
   -> n
-  -> Op (CounterC n) a (ExceptT () m) n
+  -> Op (CounterC n) (ExceptT () m) a n
 subGuard lim amt = assert (withInput lim atLeast) *> subOp amt
 
 addGuard
   :: (Monad m, Num n, Ord n)
   => n
   -> n
-  -> Op (CounterC n) a (ExceptT () m) n
+  -> Op (CounterC n) (ExceptT () m) a n
 addGuard lim amt = assert (withInput lim atMost) *> addOp amt

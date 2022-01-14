@@ -16,7 +16,7 @@ keyLf k = Lifter
 
 insertOp
   :: (Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
-  => Op (MapC' k c) (k,CState c) m k
+  => Op (MapC' k c) m (k,CState c) k
 insertOp = mkOp
   insertAny
   idC

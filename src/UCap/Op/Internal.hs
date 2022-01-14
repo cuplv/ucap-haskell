@@ -32,7 +32,7 @@ instance (Monad m, Cap c) => Monad (OpBody c m) where
     (e2,a2) <- b2 (eFun e1 s)
     return (e1 <> e2, a2)
 
-{-| An operation of type @'Op' c a m b@ is a transaction on a replicated
+{-| An operation of type @'Op' c m a b@ is a transaction on a replicated
   capability store of type @c@.  An operation is a read-and-modify
   store update wrapped in a set of capability requirements.
 
@@ -47,17 +47,17 @@ instance (Monad m, Cap c) => Monad (OpBody c m) where
   @'Control.Applicative.pure' a@ returns @a@ without reading or
   modifying the store state.
 -}
-data Op c a m b
+data Op c m a b
   = Op { opRead :: c
        , opWrite :: c
        , opProduces :: c
        , opBody :: a -> OpBody c m b
        }
 
-instance (Functor m) => Functor (Op c a m) where
+instance (Functor m) => Functor (Op c m a) where
   fmap f (Op r w p b) = Op r w p $ (fmap.fmap) f b
 
-instance (Monad m, Cap c) => Applicative (Op c a m) where
+instance (Monad m, Cap c) => Applicative (Op c m a) where
   pure a = Op uniC idC idC $ const (pure a)
 
   Op r1 w1 p1 b1 <*> Op r2 w2 p2 b2 = pipe
@@ -66,9 +66,9 @@ instance (Monad m, Cap c) => Applicative (Op c a m) where
 
 pipe
   :: (Monad m, Cap c)
-  => Op c a1 m a2
-  -> Op c a2 m a3
-  -> Op c a1 m a3
+  => Op c m a1 a2
+  -> Op c m a2 a3
+  -> Op c m a1 a3
 pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
   let (w3,p3) = case (split w2 p1, split p1 w2) of
                   (Just w2',_) -> (w1 <> w2', p2)
@@ -101,23 +101,23 @@ pipe (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) =
 -}
 (*>=)
   :: (Monad m, Cap c)
-  => Op c a1 m a2
-  -> Op c a2 m a3
-  -> Op c a1 m a3
+  => Op c m a1 a2
+  -> Op c m a2 a3
+  -> Op c m a1 a3
 (*>=) = pipe
 
-mkOp :: (Cap c) => c -> c -> (a -> m (CEffect c, b)) -> Op c a m b
+mkOp :: (Cap c) => c -> c -> (a -> m (CEffect c, b)) -> Op c m a b
 mkOp w p b = Op uniC w p $ \a -> OpBody . const $ (b a)
 
-liftOpM :: (Monad m, MonadTrans t) => Op c a m b -> Op c a (t m) b
+liftOpM :: (Monad m, MonadTrans t) => Op c m a b -> Op c (t m) a b
 liftOpM = onOpM lift
 
-onOpM :: (m1 (CEffect c,b) -> m2 (CEffect c,b)) -> Op c a m1 b -> Op c a m2 b
-onOpM g (Op c a m b) = Op c a m $ \a ->
+onOpM :: (m1 (CEffect c,b) -> m2 (CEffect c,b)) -> Op c m1 a b -> Op c m2 a b
+onOpM g (Op c m a b) = Op c a m $ \a ->
   let OpBody f = b a
   in OpBody $ \s -> g (f s)
 
-mapOp' :: (Functor m, Cap c) => (a -> m b) -> Op c a m b
+mapOp' :: (Functor m, Cap c) => (a -> m b) -> Op c m a b
 mapOp' f =
   Op uniC idC idC $ \a -> OpBody . const $ (\b -> (idE, b)) <$> f a
 
@@ -128,7 +128,7 @@ mapOp' f =
 'mapOp' f = f 'Control.Functor.<$>' 'idOp'
 @
 -}
-mapOp :: (Applicative m, Cap c) => (a -> b) -> Op c a m b
+mapOp :: (Applicative m, Cap c) => (a -> b) -> Op c m a b
 mapOp f = mapOp' (pure . f)
 
 {-| Statically fill in the dynamic input of an operation.  The resulting
@@ -140,14 +140,14 @@ a `'withInput'` o = 'pure' a '*>=' o
 a `'withInput'` 'idOp' = 'pure' a
 @
 -}
-withInput :: (Monad m, Cap c) => a1 -> Op c a1 m b -> Op c a2 m b
+withInput :: (Monad m, Cap c) => a1 -> Op c m a1 b -> Op c m a2 b
 withInput a o = pure a *>= o
 
 {-| Turn an operation returning 'Bool' into one which fails (using the
   'Control.Monad.Except.ExceptT' monad transformer) when it would have
   returned 'False'.  This is useful for defining assertions that
   should cancel an operation when they don't hold. -}
-assert :: (Monad m, Cap c) => Op c a m Bool -> Op c a (ExceptT () m) ()
+assert :: (Monad m, Cap c) => Op c m a Bool -> Op c (ExceptT () m) a ()
 assert o = liftOpM o *>= mapOp' (\b -> if b
                                           then return ()
                                           else throwError ())
@@ -160,7 +160,7 @@ assert o = liftOpM o *>= mapOp' (\b -> if b
   state depends on the @c@ argument given, so you should prefer to use
   more specific queries defined for particular store types, such as
   'Data.UCap.Op.Counter.atLeast' for 'Data.UCap.Counter.CounterC'. -}
-query :: (Applicative m, Cap c) => c -> Op c a m (CState c)
+query :: (Applicative m, Cap c) => c -> Op c m a (CState c)
 query c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 
 {-| @'pairOp' o1 o2@ runs operations @o1@ and @o2@ in sequence, giving
@@ -173,12 +173,12 @@ query c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 @
 
 -}
-pairOp :: (Monad m, Cap c) => Op c a m b1 -> Op c a m b2 -> Op c a m (b1,b2)
+pairOp :: (Monad m, Cap c) => Op c m a b1 -> Op c m a b2 -> Op c m a (b1,b2)
 pairOp o1 o2 = (,) <$> o1 <*> o2
 
 {-| The identity operation, which leaves the store untouched and simply
   returns its dynamic input. -}
-idOp :: (Applicative m, Cap c) => Op c a m a
+idOp :: (Applicative m, Cap c) => Op c m a a
 idOp = mapOp id
 
 {-| Modify the store with a static effect.  Because the effect is
@@ -188,19 +188,19 @@ idOp = mapOp id
 
   'effect' passes its input on as the return value.
 -}
-effect :: (Applicative m, Cap c) => CEffect c -> Op c a m a
+effect :: (Applicative m, Cap c) => CEffect c -> Op c m a a
 effect e = mkOp (mincap e) (undo e) $ \a -> pure (e,a)
 -- effect e = effect' e ()
 
 {-| Same as 'effect', but takes a static return value as well. -}
-effect' :: (Applicative m, Cap c) => CEffect c -> b -> Op c a m b
+effect' :: (Applicative m, Cap c) => CEffect c -> b -> Op c m a b
 effect' e b = mkOp (mincap e) (undo e) . const . pure $ (e,b)
 
 overLf'
   :: (Monad m)
   => Lifter c1 c2
-  -> Op c2 a m b
-  -> Op c1 a (ExceptT () m) b
+  -> Op c2 m a b
+  -> Op c1 (ExceptT () m) a b
 overLf' ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
@@ -210,7 +210,7 @@ overLf' ed (Op r w p b) = Op
 {-| Given state types @c1@ and @c2@, where @c2@ is a component of @c1@,
   'edLift' transforms an operation on @c2@ into the equivalent @c1@
   operation which leaves the other components untouched. -}
-overLf :: (Monad m) => Lifter c1 c2 -> Op c2 a m b -> Op c1 a m b
+overLf :: (Monad m) => Lifter c1 c2 -> Op c2 m a b -> Op c1 m a b
 overLf ed (Op r w p b) = Op
   (readLift ed r)
   (writeLift ed w)
@@ -259,5 +259,5 @@ fullCaps = Caps idC uniC
 'UCap.Lifter._1ed' ^# op1 = overLf 'UCap.Lifter._1ed' op1
 @
 -}
-(^#) :: (Monad m) => Lifter c1 c2 -> Op c2 a m b -> Op c1 a m b
+(^#) :: (Monad m) => Lifter c1 c2 -> Op c2 m a b -> Op c1 m a b
 (^#) = overLf
