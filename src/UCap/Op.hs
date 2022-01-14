@@ -8,8 +8,6 @@ module UCap.Op
   , execOp
   , execWith
   , pipe
-  , (>>>)
-  , (<<<)
   , idOp
   , query
   , effect
@@ -17,7 +15,10 @@ module UCap.Op
   , mapOp
   , actionOp
   , pairOp
+  , eitherOp
   , assert
+  , (>>>)
+  , (<<<)
   , Caps (..)
   , emptyCaps
   , fullCaps

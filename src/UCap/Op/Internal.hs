@@ -81,7 +81,13 @@ instance (Monad m, Cap c) => Arrow (Op c m) where
   arr = mapOp
   first o = pairOp (mapOp fst `pipe` o) (mapOp snd)
   second o = pairOp (mapOp fst) (mapOp snd `pipe` o)
+  o1 *** o2 = pairOp (mapOp fst `pipe` o1) (mapOp snd `pipe` o2)
+  (&&&) = pairOp
 
+instance (Monad m, Cap c) => ArrowChoice (Op c m) where
+  (+++) = eitherOp
+
+{-| The right-to-left version of 'pipe'. -}
 pipeRL
   :: (Monad m, Cap c)
   => Op c m a2 a3
@@ -207,6 +213,28 @@ query c = Op c idC idC . const . OpBody $ \s -> pure (idE,s)
 -}
 pairOp :: (Monad m, Cap c) => Op c m a b1 -> Op c m a b2 -> Op c m a (b1,b2)
 pairOp o1 o2 = (,) <$> o1 <*> o2
+
+{-| Given an 'Data.Either.Either' input, apply the one of the given
+  operations to it, based on the 'Data.Either.Left' or
+  'Data.Either.Right' value inside.  This is a synonym for the '+++'
+  arrow operator.
+
+@
+'withInput' ('Data.Either.Left' x) op1 op2 = 'withInput' x op1
+
+'withInput' ('Data.Either.Right' x) op1 op2 = 'withInput' x op2
+@
+-}
+eitherOp
+  :: (Functor m, Cap c)
+  => Op c m a1 b1
+  -> Op c m a2 b2
+  -> Op c m (Either a1 a2) (Either b1 b2)
+eitherOp (Op r1 w1 p1 b1) (Op r2 w2 p2 b2) = Op
+  (r1 `meet` r2)
+  (w1 <> w2)
+  (p1 <> p2)
+  (either (fmap Left . b1) (fmap Right . b2))
 
 {-| The identity operation, which leaves the store untouched and simply
   returns its dynamic input. -}
