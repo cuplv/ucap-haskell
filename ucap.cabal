@@ -11,13 +11,15 @@ library
     exposed-modules:  Data.InfNum
                     , Data.InfMap
                     , Data.InfSet
-                    , Data.VClock
                     , UCap
                     , UCap.Domain
                     , UCap.Lens
                     , UCap.Lifter
                     , UCap.Op
                     , UCap.Replica
+                    , UCap.Replica.Types
+                    , UCap.Replica.VClock
+                    , UCap.Replica.VThread
     other-modules:    UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
