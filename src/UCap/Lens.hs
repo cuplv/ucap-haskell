@@ -1,5 +1,5 @@
 module UCap.Lens
-  ( module Lens.Micro.GHC
+  ( module Lens.Micro.Platform
   , (/\~)
   , meetTo
   , plusTo
@@ -7,7 +7,7 @@ module UCap.Lens
 
 import UCap.Domain.Classes (Meet (..), BMeet (..))
 
-import Lens.Micro.GHC
+import Lens.Micro.Platform
 
 (/\~) :: (Meet a) => ASetter s t a a -> a -> s -> t
 (/\~) l b = l %~ meet b

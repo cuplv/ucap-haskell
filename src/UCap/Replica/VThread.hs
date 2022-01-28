@@ -8,6 +8,7 @@ import UCap.Replica.Types
 import UCap.Replica.VClock
 
 import Control.Monad (foldM)
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -121,3 +122,42 @@ reduceToVis i t@(VThread m) = VThread $
                         Just n -> Just (v1,take (n + 1) es1)
                         Nothing -> Nothing
   in Map.mapMaybeWithKey f m
+
+{-| Turn a 'VThread' structure into a flat sequence of event payloads.
+  Payloads are ordered based on causal order, with ties broken by
+  comparing event-IDs (using 'simpleIdOrder'). -}
+serialize :: (Ord i) => VThread i d -> [d]
+serialize = serialize' simpleIdOrder
+
+{-| A version of 'serialize' that takes a custom tie-breaking event-ID
+  comparison.
+
+@
+'serialize'' 'simpleIdOrder' = 'serialize'
+@
+-}
+serialize'
+  :: (Ord i)
+  => (EventId i -> EventId i -> Ordering)
+  -> VThread i d
+  -> [d]
+serialize' tieBreak (VThread m) =
+  map (snd.snd)
+  . List.sortBy order
+  . mconcat
+  . map iddEvents
+  . Map.assocs
+  $ m
+  where mkids i = zip (repeat i) [0..]
+        iddEvents (i,(_,es)) = zip (mkids i) es
+        order (i1,(v1,e1)) (i2,(v2,e2)) 
+          | v1 `precedes` v2 = LT
+          | v2 `precedes` v1 = GT
+          | otherwise = tieBreak i1 i2
+
+{-| An ordering on event IDs that first compares sequence number (number
+  of preceding events on the same process) and then process ID. -}
+simpleIdOrder :: (Ord i) => EventId i -> EventId i -> Ordering
+simpleIdOrder (i1,n1) (i2,n2) = case compare n1 n2 of
+                                  EQ -> compare i1 i2
+                                  o -> o

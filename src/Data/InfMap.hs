@@ -26,7 +26,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
 import GHC.Generics
-import Lens.Micro.GHC
+import Lens.Micro.Platform
 
 data InfMap k v =
   InfMap { baseVal :: v

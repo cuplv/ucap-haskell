@@ -4,10 +4,11 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Data.InfMapTests (testInfMap)
-import Data.VClockTests (testVClock)
 import UCapTests (testUCap)
 import UCap.MapTests (testMap)
 import UCap.OpTests (testOp)
+import UCap.Replica.VClockTests (testVClock)
+import UCap.Replica.VThreadTests (testVThread)
 
 main = defaultMain tests
 
@@ -18,4 +19,5 @@ tests = testGroup "Tests"
   , testUCap
   , testMap
   , testOp
+  , testVThread
   ]

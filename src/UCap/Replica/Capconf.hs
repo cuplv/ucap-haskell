@@ -178,12 +178,12 @@ instance (Ord i, ToJSON i, ToJSONKey i, ToJSON c) => ToJSON (Capconf i c)
 instance (Ord i, FromJSON i, FromJSONKey i, FromJSON c) => FromJSON (Capconf i c)
 
 instance
-  (Ord i, Ord c, Meet c, Monoid c, Split c)
+  (Ord i, Meet c, Monoid c, Split c)
   => Semigroup (Capconf i c) where
   Capconf m1 <> Capconf m2 = Capconf $ Map.unionWith mergeH m1 m2
 
 instance
-  (Ord i, Ord c, Meet c, Monoid c, Split c)
+  (Ord i, Meet c, Monoid c, Split c)
   => Monoid (Capconf i c) where
   mempty = Capconf mempty
 

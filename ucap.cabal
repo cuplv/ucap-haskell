@@ -35,7 +35,7 @@ library
     build-depends:    base ^>=4.14.3.0
                     , containers
                     , aeson
-                    , microlens-ghc
+                    , microlens-platform
                     , mtl
     hs-source-dirs:   src
     default-language: Haskell2010
@@ -46,10 +46,11 @@ test-suite test
     hs-source-dirs:   test
     main-is:          test.hs
     other-modules:    Data.InfMapTests
-                    , Data.VClockTests
                     , UCapTests
                     , UCap.MapTests
                     , UCap.OpTests
+                    , UCap.Replica.VClockTests
+                    , UCap.Replica.VThreadTests
     build-depends:    base ^>=4.14.3.0
                     , containers
                     , mtl

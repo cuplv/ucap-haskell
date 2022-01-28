@@ -1,6 +1,6 @@
-module Data.VClockTests (testVClock) where
+module UCap.Replica.VClockTests (testVClock) where
 
-import Data.VClock
+import UCap.Replica.VClock
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -11,7 +11,9 @@ testVClock = testGroup "VClock"
   [testCase "zero" $
      zc `precedes` zc @?= False
   ,testCase "zero1" $
-     lookupVC "a" zc @?= 0
+     lookupVC "a" zc @?= Nothing
+  ,testCase "nonzero" $
+     lookupVC "a" (tick "a" . tick "a" $ zc) @?= Just 1
   ,testCase "tick" $
      zc `precedes` tick "a" zc @?= True
   ,testCase "tick1" $
