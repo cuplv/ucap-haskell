@@ -3,8 +3,10 @@
 
 module UCap.Replica.Demo
   ( DemoState
+  , RState
   , runDemo
   , evalDemo
+  , evalDemoU
   , transactD
   , observeD
   , stateD
@@ -38,7 +40,7 @@ type DemoState i c m =
          (ReaderT (CState c)
             (StateT (RState i c) m))
 
-{-| Run a demo action on the given initial store state (@'CState' c) and
+{-| Run a demo action on the given initial store state (@'CState' c@) and
   starting network state (@'RState' i c@). -}
 runDemo
   :: (Ord i, Cap c, Monad m)
@@ -55,14 +57,25 @@ runDemo s0 rs0 act =
   (@'Capconf' i c@). -}
 evalDemo
   :: (Ord i, Cap c, Monad m)
-  => CState c
-  -> [i]
+  => [i]
   -> Capconf i c
+  -> CState c
   -> DemoState i c m a
   -> m (Either () a)
-evalDemo s0 ps cc0 act = do
+evalDemo ps cc0 s0 act = do
   let ccs = Map.fromList $ zip ps (repeat cc0)
   fst <$> runDemo s0 (initThreads,ccs) act
+
+{-| Same as 'evalDemo', but assign all processes the same initial
+  capability. -}
+evalDemoU
+  :: (Ord i, Cap c, Monad m)
+  => [i]
+  -> c
+  -> CState c
+  -> DemoState i c m a
+  -> m (Either () a)
+evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
 
 {-| Run an 'Op' on the given process.  If the process does not have
   sufficient capabilities, a 'Nothing' value is returned. -}

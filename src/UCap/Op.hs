@@ -18,7 +18,6 @@ module UCap.Op
   , eitherOp
   , assert
   , (>>>)
-  , (<<<)
   , Caps (..)
   , emptyCaps
   , fullCaps
@@ -86,4 +85,4 @@ execWith (Caps cr cw) s (Op r w p b) = case b () of
                          in (caps',e,b))
                  
       (f s)
-    Nothing -> Nothing
+    _ -> Nothing

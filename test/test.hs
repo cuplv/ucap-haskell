@@ -7,6 +7,7 @@ import Data.InfMapTests (testInfMap)
 import UCapTests (testUCap)
 import UCap.MapTests (testMap)
 import UCap.OpTests (testOp)
+import UCap.Replica.DemoTests (testDemo)
 import UCap.Replica.VClockTests (testVClock)
 import UCap.Replica.VThreadTests (testVThread)
 
@@ -20,4 +21,5 @@ tests = testGroup "Tests"
   , testMap
   , testOp
   , testVThread
+  , testDemo
   ]
