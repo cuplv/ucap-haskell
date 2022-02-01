@@ -21,6 +21,7 @@ import UCap
 import UCap.Lens
 import UCap.Op
 import UCap.Replica.Capconf
+import UCap.Replica.Script
 import UCap.Replica.Types
 import UCap.Replica.VClock
 import UCap.Replica.VThread
@@ -76,6 +77,19 @@ evalDemoU
   -> DemoState i c m a
   -> m (Either () a)
 evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
+
+script
+  :: (Ord i, Cap c, Monad m)
+  => i
+  -> Script i c a
+  -> DemoState i c m (Either (Script i c a) a)
+script i sc = case sc of
+  EmitEffect e sc' -> (_1 %= event i e) >> script i sc'
+  ReadCaps f -> script i . f =<< use (capsL i)
+  ReadState f -> script i . f =<< stateD i
+  WriteCaps cc' sc' -> (capsL i .= cc') >> script i sc'
+  Blocked sc' -> return (Left sc')
+  Return a -> return (Right a)
 
 {-| Run an 'Op' on the given process.  If the process does not have
   sufficient capabilities, a 'Nothing' value is returned. -}
