@@ -1,66 +1,92 @@
-module UCap.Replica.Script where
+module UCap.Replica.Script
+  ( ScriptF (..)
+  , ScriptT
+  , unwrapScript
+  , getReplicaId
+  , readCaps
+  , readState
+  , writeCaps
+  , writeState
+  , block
+  , transact
+  ) where
 
 import UCap.Domain
 import UCap.Op
 import UCap.Replica.Capconf
 
-data Script i c a
-  = EmitEffect (CEffect c) (Script i c a)
-  | ReadCaps (Capconf i c -> Script i c a)
-  | ReadState (CState c -> Script i c a)
-  | WriteCaps (Capconf i c) (Script i c a)
-  | Blocked (Script i c a)
-  | Return a
+import Control.Monad.Reader
+import Control.Monad.Trans.Free
 
-emit :: CEffect c -> Script i c ()
-emit e = EmitEffect e (Return ())
+data ScriptF i c a
+  = ReadCaps (Capconf i c -> a)
+  | ReadState (CState c -> a)
+  | WriteCaps (Capconf i c) a
+  | WriteState (CEffect c) a
+  | Blocked a
 
-readCaps :: Script i c (Capconf i c)
-readCaps = ReadCaps Return
-
-readState :: Script i c (CState c)
-readState = ReadState Return
-
-writeCaps :: Capconf i c -> Script i c ()
-writeCaps cc = WriteCaps cc (Return ())
-
-block :: Script i c ()
-block = Blocked (Return ())
-
-instance Functor (Script i c) where
+instance Functor (ScriptF i c) where
   fmap f sc = case sc of
-    EmitEffect e sc' -> EmitEffect e (fmap f sc')
-    ReadCaps f2 -> ReadCaps $ fmap f . f2
-    ReadState f2 -> ReadState $ fmap f . f2
-    WriteCaps cc' sc' -> WriteCaps cc' (fmap f sc')
-    Blocked sc' -> Blocked (fmap f sc')
-    Return a -> Return (f a)
+                ReadCaps f1 -> ReadCaps (f . f1)
+                ReadState f1 -> ReadState (f . f1)
+                WriteCaps cc a -> WriteCaps cc (f a)
+                WriteState e a -> WriteState e (f a)
+                Blocked a -> Blocked (f a)
 
-instance Applicative (Script i c) where
-  pure = Return
-  sc1 <*> sc2 = case sc1 of
-    EmitEffect e1 sc1' -> EmitEffect e1 (sc1' <*> sc2)
-    ReadCaps f -> ReadCaps $ \cc -> f cc <*> sc2
-    ReadState f -> ReadState $ \s -> f s <*> sc2
-    WriteCaps cc1 sc1' -> WriteCaps cc1 (sc1' <*> sc2)
-    Blocked sc1' -> Blocked (sc1' <*> sc2)
-    Return f -> f <$> sc2
+type ScriptT i c m a = FreeT (ScriptF i c) (ReaderT i m) a
 
-instance Monad (Script i c) where
-  return = Return
-  sc1 >>= fm = case sc1 of
-    EmitEffect e1 sc1' -> EmitEffect e1 (sc1' >>= fm)
-    ReadCaps f -> ReadCaps $ \cc -> (f cc) >>= fm
-    ReadState f -> ReadState $ \s -> (f s) >>= fm
-    WriteCaps cc1 sc1' -> WriteCaps cc1 (sc1' >>= fm)
-    Blocked sc1' -> Blocked (sc1' >>= fm)
-    Return a -> fm a
+getReplicaId :: (Monad m) => ScriptT i c m i
+getReplicaId = ask
 
-data ScriptT i c m a
-  = ScriptT { runScriptT :: m (Script i c a) }
+readCaps :: (Monad m) => ScriptT i c m (Capconf i c)
+readCaps = wrap $ ReadCaps return
 
--- transact
---   :: (Ord i, Cap c, Monad m)
---   => Op c m () a
---   -> m (Script i c (Maybe a))
--- transact op = undefined
+readState :: (Monad m) => ScriptT i c m (CState c)
+readState = wrap $ ReadState return
+
+writeCaps :: (Monad m) => Capconf i c -> ScriptT i c m ()
+writeCaps cc = wrap $ WriteCaps cc (return ())
+
+writeState :: (Monad m) => CEffect c -> ScriptT i c m ()
+writeState e = wrap $ WriteState e (return ())
+-- writeState e = term $ WriteState e (return ())
+-- writeState e = FreeT $ return (Free (WriteState e (return ())))
+
+block :: (Monad m) => ScriptT i c m ()
+block = wrap $ Blocked (return ())
+
+{-| Compile an operation into a replica script. -}
+transact
+  :: (Ord i, Cap c, Monad m)
+  => Op c m () a
+  -> ScriptT i c m (Maybe a)
+transact op = do
+  rid <- getReplicaId
+  cc <- readCaps
+  let caps = Caps (remoteG' rid cc) (localG rid cc)
+  s <- readState
+  case execWith caps s op of
+    Just act -> do
+      (_,e,b) <- liftScript act
+      case consumeG rid e cc of
+        Just cc' -> do
+          writeState e
+          writeCaps cc'
+          return (Just b)
+    Nothing -> return Nothing
+
+{-| Perform an action on the underlying monad of the script. -}
+liftScript :: (Monad m) => m a -> ScriptT i c m a
+liftScript = lift . lift
+
+{-| Get the first term of a script, wrapped in 'Left', or the return
+  value of the script, wrapped in 'Right'. -}
+unwrapScript
+  :: (Monad m)
+  => ScriptT i c m a
+  -> i
+  -> m (Either (ScriptF i c (ScriptT i c m a)) a)
+unwrapScript sc i = runReaderT (runFreeT sc) i >>= \t ->
+  case t of
+    Free s -> return $ Left s
+    Pure a -> return $ Right a

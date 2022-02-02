@@ -30,6 +30,7 @@ import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
+-- import Control.Monad.Trans.Free
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -81,15 +82,23 @@ evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
 script
   :: (Ord i, Cap c, Monad m)
   => i
-  -> Script i c a
-  -> DemoState i c m (Either (Script i c a) a)
-script i sc = case sc of
-  EmitEffect e sc' -> (_1 %= event i e) >> script i sc'
-  ReadCaps f -> script i . f =<< use (capsL i)
-  ReadState f -> script i . f =<< stateD i
-  WriteCaps cc' sc' -> (capsL i .= cc') >> script i sc'
-  Blocked sc' -> return (Left sc')
-  Return a -> return (Right a)
+  -> ScriptT i c m a
+  -> DemoState i c m (Either (ScriptT i c m a) a)
+script i sc = liftDemo (unwrapScript sc i) >>= \case
+  Left (ReadCaps f) -> script i . f =<< use (capsL i)
+  Left (ReadState f) -> script i . f =<< stateD i
+  Left (WriteCaps cc' sc') -> (capsL i %= (<> cc')) >> script i sc'
+  Left (WriteState e sc') -> (_1 %= event i e) >> script i sc'
+  Left (Blocked sc') -> return (Left sc')
+  Right a -> return (Right a)
+
+-- script i sc = case sc of
+--   EmitEffect e sc' -> (_1 %= event i e) >> script i sc'
+--   ReadCaps f -> script i . f =<< use (capsL i)
+--   ReadState f -> script i . f =<< stateD i
+--   WriteCaps cc' sc' -> (capsL i .= cc') >> script i sc'
+--   Blocked sc' -> return (Left sc')
+--   Return a -> return (Right a)
 
 {-| Run an 'Op' on the given process.  If the process does not have
   sufficient capabilities, a 'Nothing' value is returned. -}
