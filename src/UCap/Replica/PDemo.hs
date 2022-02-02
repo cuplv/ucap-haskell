@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
 
 module UCap.Replica.PDemo where
 
@@ -84,9 +83,18 @@ evalRep i = do
       return True
     _ -> return False
 
+{-| Perform 'evalRep' and then 'broadcast' if any updates were made. -}
+evalRepB :: (Ord i, Cap c, Monad m) => i -> PDemo i c m Bool
+evalRepB i = do
+  r <- evalRep i
+  if r
+     then broadcast i
+     else return ()
+  return r
+
 {-| List of replicas which are not in the 'Idle' state. -}
 nonIdle :: (Ord i, Monad m) => PDemo i c m [i]
-nonIdle = catMaybes <$> (mapM f =<< replicaIds)
+nonIdle = catMaybes <$> (traverse f =<< replicaIds)
   where f i = do
           m <- get
           case Map.lookup i m of
@@ -95,6 +103,9 @@ nonIdle = catMaybes <$> (mapM f =<< replicaIds)
             Nothing -> error "Replica had no script/state (nonIdle)."
 
 {-| Loop through the replicas, running scripts which are not blocked.
+  After each pause in a script, that replica broadcasts.  This means
+  that replicas run in a sequential context.
+
   This continues until all replicas are either finished ('Idle') or
   deadlocked ('Waiting' with no opportunity to resume).  The IDs of
   deadlocked replicas are returned, so an empty list indicates
@@ -102,7 +113,49 @@ nonIdle = catMaybes <$> (mapM f =<< replicaIds)
 loopPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
 loopPD = do
   rids <- replicaIds
-  progress <- or <$> mapM evalRep rids
+  progress <- or <$> traverse evalRepB rids
   if progress
      then loopPD
      else nonIdle
+
+{-| Like 'loopPD', but broadcasts are only sent when all replicas have
+  become stuck.  If all replicas terminate, their resulting states
+  may be left different from one another.
+
+  This imposes inconsistency.  A replica may act upon a view of
+  the state that other replicas do not share. -}
+loopLazyPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
+loopLazyPD = loopLazyPD' True
+
+loopLazyPD' tryB = do
+  rids <- replicaIds
+  progress1 <- or <$> traverse evalRep rids
+  if progress1
+     then loopLazyPD' True
+     else do is <- nonIdle
+             if is /= [] && tryB
+                then traverse_ broadcast rids >> loopLazyPD' False
+                else return is
+
+addScript :: (Ord i, Monad m) => i -> PScript i c m -> PDemo i c m ()
+addScript i sc = do
+  scm <- use $ at i
+  case scm of
+    Just Idle ->
+      at i .= Just (Running sc)
+    Just (Running sc0) ->
+      at i .= Just (Running $ sc0 >> sc)
+    Just (Waiting acs) ->
+      at i .= Just (Waiting $ map (\(ac,sc0) -> (ac, sc0 >> sc)) acs)
+
+{-| @'unicast i1 i2'@ sends an update from @i1@ to @i2@.  After doing
+  so, @i2@ will have seen all events that @i1@ has, and @i2@'s
+  coordination information includes that of @i1@. -}
+unicast :: (Ord i, Cap c, Monad m) => i -> i -> PDemo i c m ()
+unicast send recv = lift $ observeD recv send
+
+{-| Send updates from the given replica to all others. -}
+broadcast :: (Ord i, Cap c, Monad m) => i -> PDemo i c m ()
+broadcast i = do
+  rids <- filter (/= i) <$> replicaIds
+  traverse_ (unicast i) rids

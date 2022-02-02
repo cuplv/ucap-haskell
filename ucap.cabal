@@ -53,6 +53,7 @@ test-suite test
                     , UCap.MapTests
                     , UCap.OpTests
                     , UCap.Replica.DemoTests
+                    , UCap.Replica.PDemoTests
                     , UCap.Replica.VClockTests
                     , UCap.Replica.VThreadTests
     build-depends:    base ^>=4.14.3.0
