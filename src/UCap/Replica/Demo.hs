@@ -9,6 +9,7 @@ module UCap.Replica.Demo
   , evalDemoU
   , evalDemoU'
   , script
+  , tryAwait
   , (.//)
   , noBlock
   , transactD
@@ -34,6 +35,7 @@ import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -97,21 +99,40 @@ script
   :: (Ord i, Cap c, Monad m)
   => i
   -> ScriptT i c m a
-  -> DemoState i c m (Either (ScriptT i c m a) a)
+  -> DemoState i c m (Either (AwaitBs i c (ScriptT i c m a)) a)
 script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (ReadCaps f) -> script i . f =<< use (capsL i)
   Left (ReadState f) -> script i . f =<< stateD i
-  Left (WriteCaps cc' sc') -> (capsL i %= (<> cc')) >> script i sc'
-  Left (WriteState e sc') -> (_1 %= event i e) >> script i sc'
-  Left (Blocked sc') -> return (Left sc')
+  Left (WriteCaps cc' sc') -> do
+    capsL i %= (<> cc')
+    script i sc'
+  Left (WriteState e sc') -> do
+    _1 %= event i e
+    script i sc'
+  Left (Await acs) -> tryAwait i acs >>= \case
+    Just sc' -> script i sc'
+    Nothing -> return (Left acs)
   Right a -> return (Right a)
+
+tryAwait
+  :: (Ord i, Cap c, Monad m)
+  => i
+  -> AwaitBs i c a
+  -> DemoState i c m (Maybe a)
+tryAwait i acs = do
+  state <- (,) <$> use (capsL i) <*> stateD i
+  case List.find (\(ac,_) -> ac state) acs of
+    Just (_,a) -> return (Just a)
+    Nothing -> return Nothing
 
 {-| Run a transaction, on a particular replica, in the demo simulation. -}
 (.//)
   :: (Ord i, Cap c, Monad m)
   => i
   -> Op c m () a
-  -> DemoState i c m (Either (ScriptT i c m (Maybe a)) (Maybe a))
+  -> DemoState i c m (Either
+                        [(ACond i c, ScriptT i c m (Maybe a))]
+                        (Maybe a))
 i .// op = script i (transact op)
 
 {-| Run a replica script that is not expected to block.  If it does
