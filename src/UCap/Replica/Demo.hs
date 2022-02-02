@@ -7,6 +7,9 @@ module UCap.Replica.Demo
   , runDemo
   , evalDemo
   , evalDemoU
+  , evalDemoU'
+  , script
+  , (./$)
   , transactD
   , observeD
   , stateD
@@ -79,6 +82,16 @@ evalDemoU
   -> m (Either () a)
 evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
 
+evalDemoU'
+  :: (Ord i, Cap c)
+  => [i]
+  -> c
+  -> CState c
+  -> DemoState i c Identity a
+  -> a
+evalDemoU' ps c0 s0 act = case evalDemo ps (mkUniform c0 ps) s0 act of
+  Identity (Right a) -> a
+
 script
   :: (Ord i, Cap c, Monad m)
   => i
@@ -91,6 +104,13 @@ script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (WriteState e sc') -> (_1 %= event i e) >> script i sc'
   Left (Blocked sc') -> return (Left sc')
   Right a -> return (Right a)
+
+(./$)
+  :: (Ord i, Cap c, Monad m)
+  => i
+  -> ScriptT i c m a
+  -> DemoState i c m (Either (ScriptT i c m a) a)
+(./$) = script
 
 -- script i sc = case sc of
 --   EmitEffect e sc' -> (_1 %= event i e) >> script i sc'
