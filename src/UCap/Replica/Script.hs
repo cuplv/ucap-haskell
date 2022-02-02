@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 module UCap.Replica.Script
   ( ScriptF (..)
   , ScriptT
@@ -8,28 +10,38 @@ module UCap.Replica.Script
   , writeCaps
   , writeState
   , block
+  , await
+  , popQ
+  , liftScript
   , ACond
+  , AwaitB
   , AwaitBs
   , transact
   ) where
 
 import UCap.Domain
+import UCap.Lens
 import UCap.Op
 import UCap.Replica.Capconf
 
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Trans.Free
 
 type ACond i c m = (Capconf i c, CState c) -> m Bool
 
-type AwaitBs i c m a = [(ACond i c m, a)]
+type AwaitBF i c m a = (ACond i c m, a)
+
+type AwaitB i c m a = AwaitBF i c m (ScriptT i c m a)
+
+type AwaitBs i c m a = [AwaitBF i c m a]
 
 data ScriptF i c m a
   = ReadCaps (Capconf i c -> a)
   | ReadState (CState c -> a)
   | WriteCaps (Capconf i c) a
   | WriteState (CEffect c) a
-  | Await (AwaitBs i c m a)
+  | Await [AwaitBF i c m a]
 
 instance Functor (ScriptF i c m) where
   fmap f sc = case sc of
@@ -97,3 +109,11 @@ unwrapScript sc i = runReaderT (runFreeT sc) i >>= \t ->
   case t of
     Free s -> return $ Left s
     Pure a -> return $ Right a
+
+{-| An await-clause that pops an element from a list in an underlying
+  'MonadState' when one becomes available. -}
+popQ :: (MonadState a m) => Lens' a [b] -> AwaitB i c m b
+popQ l =
+  let test = do not . null <$> use l
+      cont = head <$> liftScript (l <<%= drop 1)
+  in (const test, cont)

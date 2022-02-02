@@ -138,7 +138,7 @@ liftOpM :: (Monad m, MonadTrans t) => Op c m a b -> Op c (t m) a b
 liftOpM = onOpM lift
 
 onOpM :: (m1 (CEffect c,b) -> m2 (CEffect c,b)) -> Op c m1 a b -> Op c m2 a b
-onOpM g (Op c m a b) = Op c a m $ \a ->
+onOpM g (Op c m a b) = Op c m a $ \a ->
   let OpBody f = b a
   in OpBody $ \s -> g (f s)
 

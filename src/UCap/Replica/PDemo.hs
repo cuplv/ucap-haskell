@@ -110,12 +110,12 @@ nonIdle = catMaybes <$> (traverse f =<< replicaIds)
   deadlocked ('Waiting' with no opportunity to resume).  The IDs of
   deadlocked replicas are returned, so an empty list indicates
   successful completion. -}
-loopPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
-loopPD = do
+loopSeqPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
+loopSeqPD = do
   rids <- replicaIds
   progress <- or <$> traverse evalRepB rids
   if progress
-     then loopPD
+     then loopSeqPD
      else nonIdle
 
 {-| Like 'loopPD', but broadcasts are only sent when all replicas have
@@ -124,17 +124,17 @@ loopPD = do
 
   This imposes inconsistency.  A replica may act upon a view of
   the state that other replicas do not share. -}
-loopLazyPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
-loopLazyPD = loopLazyPD' True
+loopPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
+loopPD = loopPD' True
 
-loopLazyPD' tryB = do
+loopPD' tryB = do
   rids <- replicaIds
   progress1 <- or <$> traverse evalRep rids
   if progress1
-     then loopLazyPD' True
+     then loopPD' True
      else do is <- nonIdle
              if is /= [] && tryB
-                then traverse_ broadcast rids >> loopLazyPD' False
+                then traverse_ broadcast rids >> loopPD' False
                 else return is
 
 addScript :: (Ord i, Monad m) => i -> PScript i c m -> PDemo i c m ()
@@ -159,3 +159,6 @@ broadcast :: (Ord i, Cap c, Monad m) => i -> PDemo i c m ()
 broadcast i = do
   rids <- filter (/= i) <$> replicaIds
   traverse_ (unicast i) rids
+
+liftPDemo :: (Monad m) => m a -> PDemo i c m a
+liftPDemo = lift . liftDemo

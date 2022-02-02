@@ -4,6 +4,7 @@ module UCap.Op
   (
   -- * Operations
     Op
+  , liftOpM
   , evalOp
   , execOp
   , execWith
