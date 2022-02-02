@@ -41,9 +41,8 @@ type RState i c = (VThread i (CEffect c), Map i (Capconf i c))
 
 {-| A monad for simulating transactions on a network of store replicas. -}
 type DemoState i c m =
-       ExceptT ()
-         (ReaderT (CState c)
-            (StateT (RState i c) m))
+       ReaderT (CState c)
+         (StateT (RState i c) m)
 
 {-| Run a demo action on the given initial store state (@'CState' c@) and
   starting network state (@'RState' i c@). -}
@@ -52,9 +51,9 @@ runDemo
   => CState c
   -> RState i c
   -> DemoState i c m a
-  -> m (Either () a, RState i c)
+  -> m (a, RState i c)
 runDemo s0 rs0 act =
-  runStateT (runReaderT (runExceptT act) s0) rs0
+  runStateT (runReaderT act s0) rs0
 
 {-| Evaluate the result of a demo action from an initial store state and
   an inital network state defined by a list of process IDs (@[i]@) and
@@ -66,7 +65,7 @@ evalDemo
   -> Capconf i c
   -> CState c
   -> DemoState i c m a
-  -> m (Either () a)
+  -> m a
 evalDemo ps cc0 s0 act = do
   let ccs = Map.fromList $ zip ps (repeat cc0)
   fst <$> runDemo s0 (initThreads,ccs) act
@@ -79,7 +78,7 @@ evalDemoU
   -> c
   -> CState c
   -> DemoState i c m a
-  -> m (Either () a)
+  -> m a
 evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
 
 evalDemoU'
@@ -90,7 +89,7 @@ evalDemoU'
   -> DemoState i c Identity a
   -> a
 evalDemoU' ps c0 s0 act = case evalDemo ps (mkUniform c0 ps) s0 act of
-  Identity (Right a) -> a
+  Identity a -> a
 
 {-| Run a replica script, on a particular replica, in the demo
   simulation. -}
@@ -175,12 +174,12 @@ foo = do
 transferD :: (Ord i, Cap c, Monad m)
   => i
   -> (i,c)
-  -> DemoState i c (ExceptT () m) ()
+  -> DemoState i c m ()
 transferD i1 (i2,c) = do
   cc <- use $ capsL i1
   case transferG i1 (i2,c) cc of
     Just cc' -> capsL i1 .= cc'
-    Nothing -> throwError ()
+    Nothing -> error "Can't transfer."
 
 {-| Accept transferred capabilities on the given process. -}
 acceptD :: (Ord i, Cap c, Monad m) => i -> DemoState i c m ()
@@ -207,4 +206,4 @@ capsL :: (Ord i, Cap c) => i -> Lens' (RState i c) (Capconf i c)
 capsL i = _2 . at i . non mempty
 
 liftDemo :: (Monad m) => m a -> DemoState i c m a
-liftDemo = lift . lift . lift
+liftDemo = lift . lift

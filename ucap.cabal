@@ -19,6 +19,7 @@ library
                     , UCap.Replica
                     , UCap.Replica.Capconf
                     , UCap.Replica.Demo
+                    , UCap.Replica.PDemo
                     , UCap.Replica.Script
                     , UCap.Replica.Types
                     , UCap.Replica.VClock
