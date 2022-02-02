@@ -20,12 +20,12 @@ testDemo = testGroup "Demo"
            stateD "alpha"
      in evalDemoU ["alpha","beta"] uniC 0 script @?= Identity (Right 18)
   ,testCase "evalU S" $
-     let m = do "alpha" ./$ transact (addOp 5)
-                "beta" ./$ transact (addOp 8)
-                "alpha" ./$ transact (query uniC >>> addOp')
+     let m = do noBlock $ "alpha" .// effect (addE 5)
+                noBlock $ "beta" .// effect (addE 8)
+                noBlock $ "alpha" .// (query uniC >>> addOp')
                 observeD "alpha" "beta"
-                "alpha" ./$ readState
-     in fromRight (-1) (evalDemoU' ["alpha","beta"] uniC 0 m) @?= 18
+                stateD "alpha"
+     in evalDemoU' ["alpha","beta"] uniC 0 m @?= 18
   ,testCase "evalU 2" $
      let script = do
            r <- transactD "alpha" (lowerBound >>> mapOp (+ 1) >>> addOp')
@@ -34,9 +34,9 @@ testDemo = testGroup "Demo"
      in evalDemoU ["alpha","beta"] uniC 0 script
         @?= Identity (Right ((Nothing, 0)))
   ,testCase "evalU S 2" $
-     let m = do r <- "alpha" ./$ transact (lowerBound >>> mapOp (+ 1) >>> addOp')
-                s <- "alpha" ./$ readState
-                return (fromRight undefined r, fromRight undefined s)
+     let m = do r <- noBlock $ "alpha" .// (lowerBound >>> mapOp (+ 1) >>> addOp')
+                s <- noBlock $ "alpha" .// query uniC
+                return (r, s)
      in evalDemoU' ["alpha","beta"] uniC 0 m
-        @?= (Nothing,0)
+        @?= (Nothing, Just 0)
   ]

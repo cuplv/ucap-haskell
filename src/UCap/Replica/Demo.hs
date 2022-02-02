@@ -9,7 +9,8 @@ module UCap.Replica.Demo
   , evalDemoU
   , evalDemoU'
   , script
-  , (./$)
+  , (.//)
+  , noBlock
   , transactD
   , observeD
   , stateD
@@ -33,7 +34,6 @@ import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
--- import Control.Monad.Trans.Free
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -92,6 +92,8 @@ evalDemoU'
 evalDemoU' ps c0 s0 act = case evalDemo ps (mkUniform c0 ps) s0 act of
   Identity (Right a) -> a
 
+{-| Run a replica script, on a particular replica, in the demo
+  simulation. -}
 script
   :: (Ord i, Cap c, Monad m)
   => i
@@ -105,20 +107,20 @@ script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (Blocked sc') -> return (Left sc')
   Right a -> return (Right a)
 
-(./$)
+{-| Run a transaction, on a particular replica, in the demo simulation. -}
+(.//)
   :: (Ord i, Cap c, Monad m)
   => i
-  -> ScriptT i c m a
-  -> DemoState i c m (Either (ScriptT i c m a) a)
-(./$) = script
+  -> Op c m () a
+  -> DemoState i c m (Either (ScriptT i c m (Maybe a)) (Maybe a))
+i .// op = script i (transact op)
 
--- script i sc = case sc of
---   EmitEffect e sc' -> (_1 %= event i e) >> script i sc'
---   ReadCaps f -> script i . f =<< use (capsL i)
---   ReadState f -> script i . f =<< stateD i
---   WriteCaps cc' sc' -> (capsL i .= cc') >> script i sc'
---   Blocked sc' -> return (Left sc')
---   Return a -> return (Right a)
+{-| Run a replica script that is not expected to block.  If it does
+  block, a runtime error will be thrown. -}
+noBlock :: (Monad m) => DemoState i c m (Either e a) -> DemoState i c m a
+noBlock m = m >>= \case
+                     Right a -> return a
+                     _ -> error "Got Left value under noBlock."
 
 {-| Run an 'Op' on the given process.  If the process does not have
   sufficient capabilities, a 'Nothing' value is returned. -}
