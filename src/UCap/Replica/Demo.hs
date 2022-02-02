@@ -99,7 +99,7 @@ script
   :: (Ord i, Cap c, Monad m)
   => i
   -> ScriptT i c m a
-  -> DemoState i c m (Either (AwaitBs i c (ScriptT i c m a)) a)
+  -> DemoState i c m (Either (AwaitBs i c m (ScriptT i c m a)) a)
 script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (ReadCaps f) -> script i . f =<< use (capsL i)
   Left (ReadState f) -> script i . f =<< stateD i
@@ -114,16 +114,19 @@ script i sc = liftDemo (unwrapScript sc i) >>= \case
     Nothing -> return (Left acs)
   Right a -> return (Right a)
 
+findM [] _ = return Nothing
+findM ((ac,a) : acs) state = ac state >>= \case
+  True -> return (Just a)
+  False -> findM acs state
+
 tryAwait
   :: (Ord i, Cap c, Monad m)
   => i
-  -> AwaitBs i c a
+  -> AwaitBs i c m a
   -> DemoState i c m (Maybe a)
 tryAwait i acs = do
   state <- (,) <$> use (capsL i) <*> stateD i
-  case List.find (\(ac,_) -> ac state) acs of
-    Just (_,a) -> return (Just a)
-    Nothing -> return Nothing
+  liftDemo $ findM acs state
 
 {-| Run a transaction, on a particular replica, in the demo simulation. -}
 (.//)
@@ -131,7 +134,7 @@ tryAwait i acs = do
   => i
   -> Op c m () a
   -> DemoState i c m (Either
-                        [(ACond i c, ScriptT i c m (Maybe a))]
+                        (AwaitBs i c m (ScriptT i c m (Maybe a)))
                         (Maybe a))
 i .// op = script i (transact op)
 

@@ -20,18 +20,18 @@ import UCap.Replica.Capconf
 import Control.Monad.Reader
 import Control.Monad.Trans.Free
 
-type ACond i c = (Capconf i c, CState c) -> Bool
+type ACond i c m = (Capconf i c, CState c) -> m Bool
 
-type AwaitBs i c a = [(ACond i c, a)]
+type AwaitBs i c m a = [(ACond i c m, a)]
 
-data ScriptF i c a
+data ScriptF i c m a
   = ReadCaps (Capconf i c -> a)
   | ReadState (CState c -> a)
   | WriteCaps (Capconf i c) a
   | WriteState (CEffect c) a
-  | Await (AwaitBs i c a)
+  | Await (AwaitBs i c m a)
 
-instance Functor (ScriptF i c) where
+instance Functor (ScriptF i c m) where
   fmap f sc = case sc of
                 ReadCaps f1 -> ReadCaps (f . f1)
                 ReadState f1 -> ReadState (f . f1)
@@ -39,7 +39,7 @@ instance Functor (ScriptF i c) where
                 WriteState e a -> WriteState e (f a)
                 Await as -> Await $ map (\(ac,a) -> (ac, f a)) as
 
-type ScriptT i c m a = FreeT (ScriptF i c) (ReaderT i m) a
+type ScriptT i c m a = FreeT (ScriptF i c m) (ReaderT i m) a
 
 getReplicaId :: (Monad m) => ScriptT i c m i
 getReplicaId = ask
@@ -56,10 +56,10 @@ writeCaps cc = wrap $ WriteCaps cc (return ())
 writeState :: (Monad m) => CEffect c -> ScriptT i c m ()
 writeState e = wrap $ WriteState e (return ())
 
-await :: (Monad m) => [(ACond i c, ScriptT i c m a)] -> ScriptT i c m a
+await :: (Monad m) => AwaitBs i c m (ScriptT i c m a) -> ScriptT i c m a
 await acs = wrap $ Await acs
 
-block :: (Monad m) => ACond i c -> ScriptT i c m ()
+block :: (Monad m) => ACond i c m -> ScriptT i c m ()
 block ac = await [(ac, return ())]
 
 {-| Compile an operation into a replica script. -}
@@ -92,7 +92,7 @@ unwrapScript
   :: (Monad m)
   => ScriptT i c m a
   -> i
-  -> m (Either (ScriptF i c (ScriptT i c m a)) a)
+  -> m (Either (ScriptF i c m (ScriptT i c m a)) a)
 unwrapScript sc i = runReaderT (runFreeT sc) i >>= \t ->
   case t of
     Free s -> return $ Left s
