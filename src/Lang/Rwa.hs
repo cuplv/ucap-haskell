@@ -1,7 +1,19 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Lang.Rwa where
+module Lang.Rwa
+  ( RwState (..)
+  , Rwa
+  , RwaF (..)
+  , RwaTerm
+  , AwaitB
+  , nextTerm
+  , readState
+  , writeState
+  , await
+  , block
+  , popQ
+  ) where
 
 import Control.Monad.State
 import Control.Monad.Trans.Free
@@ -9,6 +21,18 @@ import Lens.Micro.Platform
 
 class RwState w where
   type ReadRep w
+
+instance (RwState a, RwState b) => RwState (a,b) where
+  type ReadRep (a,b) = (ReadRep a, ReadRep b)
+
+instance (RwState a, RwState b, RwState c) => RwState (a,b,c) where
+  type ReadRep (a,b,c) = (ReadRep a, ReadRep b, ReadRep c)
+
+instance (RwState a, RwState b, RwState c, RwState d) => RwState (a,b,c,d) where
+  type ReadRep (a,b,c,d) = (ReadRep a, ReadRep b, ReadRep c, ReadRep d)
+
+instance (RwState a, RwState b, RwState c, RwState d, RwState e) => RwState (a,b,c,d,e) where
+  type ReadRep (a,b,c,d,e) = (ReadRep a, ReadRep b, ReadRep c, ReadRep d, ReadRep e)
 
 type AwaitBF w m a = (ReadRep w -> m Bool, a)
 

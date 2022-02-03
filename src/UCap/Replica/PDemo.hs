@@ -18,7 +18,7 @@ type PScript i c m = ScriptT i c m ()
 data RepState i c m
   = Idle
   | Running (PScript i c m)
-  | Waiting (AwaitBs i c m (PScript i c m))
+  | Waiting [ScriptB i c m ()]
 
 isIdle :: RepState i c m -> Bool
 isIdle Idle = True

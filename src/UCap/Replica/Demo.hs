@@ -26,6 +26,7 @@ import UCap
 import UCap.Lens
 import UCap.Op
 import UCap.Replica.Capconf
+import UCap.Replica.Coord
 import UCap.Replica.Script
 import UCap.Replica.Types
 import UCap.Replica.VClock
@@ -39,7 +40,7 @@ import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-type RState i c = (VThread i (CEffect c), Map i (Capconf i c))
+type RState i c = (VThread i (CEffect c), Map i (Capconf i c), Map i (Coord i c))
 
 {-| A monad for simulating transactions on a network of store replicas. -}
 type DemoState i c m =
@@ -70,7 +71,7 @@ evalDemo
   -> m a
 evalDemo ps cc0 s0 act = do
   let ccs = Map.fromList $ zip ps (repeat cc0)
-  fst <$> runDemo s0 (initThreads,ccs) act
+  fst <$> runDemo s0 (initThreads,ccs,mempty) act
 
 {-| Same as 'evalDemo', but assign all processes the same initial
   capability. -}
@@ -99,21 +100,18 @@ script
   :: (Ord i, Cap c, Monad m)
   => i
   -> ScriptT i c m a
-  -> DemoState i c m (Either (AwaitBs i c m (ScriptT i c m a)) a)
+  -> DemoState i c m (Either [ScriptB i c m a] a)
 script i sc = liftDemo (unwrapScript sc i) >>= \case
-  Left (ReadCaps f) -> script i . f =<< use (capsL i)
-  Left (ReadState f) -> script i . f =<< stateD i
-  Left (WriteCaps cc' sc') -> do
-    capsL i %= (<> cc')
-    script i sc'
-  Left (WriteState e sc') -> do
-    _1 %= event i e
-    script i sc'
+  Left (ReadState f) ->
+    script i . f =<< assembleReadState i
+  Left (WriteState ctx sc') ->
+    applyWriteState i ctx >> script i sc'
   Left (Await acs) -> tryAwait i acs >>= \case
     Just sc' -> script i sc'
     Nothing -> return (Left acs)
   Right a -> return (Right a)
 
+findM :: (Monad m) => [(a -> m Bool, b)] -> a -> m (Maybe b)
 findM [] _ = return Nothing
 findM ((ac,a) : acs) state = ac state >>= \case
   True -> return (Just a)
@@ -122,11 +120,31 @@ findM ((ac,a) : acs) state = ac state >>= \case
 tryAwait
   :: (Ord i, Cap c, Monad m)
   => i
-  -> AwaitBs i c m a
-  -> DemoState i c m (Maybe a)
+  -> [ScriptB i c m a]
+  -> DemoState i c m (Maybe (ScriptT i c m a))
 tryAwait i acs = do
-  state <- (,) <$> use (capsL i) <*> stateD i
-  liftDemo $ findM acs state
+  state <- assembleReadState i
+  liftDemo $ runReaderT (findM acs state) i
+
+assembleReadState
+  :: (Ord i, Cap c, Monad m)
+  => i
+  -> DemoState i c m (RepCtx i c (CState c))
+assembleReadState i = do
+  sval <- stateD i
+  cc <- use (capsL i)
+  cd <- use (coordL i)
+  return $ RepCtx sval cc cd
+
+applyWriteState
+  :: (Ord i, Cap c, Monad m)
+  => i
+  -> RepCtx i c (CEffect c)
+  -> DemoState i c m ()
+applyWriteState i (RepCtx e cc cd) = do
+  _1 %= event i e
+  capsL i .= cc
+  coordL i .= cd
 
 {-| Run a transaction, on a particular replica, in the demo simulation. -}
 (.//)
@@ -134,7 +152,8 @@ tryAwait i acs = do
   => i
   -> Op c m () a
   -> DemoState i c m (Either
-                        (AwaitBs i c m (ScriptT i c m (Maybe a)))
+                        [ScriptB i c m (Maybe a)]
+                        -- (AwaitBs i c m (ScriptT i c m (Maybe a)))
                         (Maybe a))
 i .// op = script i (transact op)
 
@@ -228,6 +247,9 @@ stateD i = eFun <$> allEffectsD i <*> initialState
 {-| A lens to the 'Capconf' for a process ID. -}
 capsL :: (Ord i, Cap c) => i -> Lens' (RState i c) (Capconf i c)
 capsL i = _2 . at i . non mempty
+
+coordL :: (Ord i, Cap c) => i -> Lens' (RState i c) (Coord i c)
+coordL i = _3 . at i . non mempty
 
 liftDemo :: (Monad m) => m a -> DemoState i c m a
 liftDemo = lift . lift
