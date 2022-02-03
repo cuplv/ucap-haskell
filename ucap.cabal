@@ -11,6 +11,7 @@ library
     exposed-modules:  Data.InfNum
                     , Data.InfMap
                     , Data.InfSet
+                    , Lang.Rwa
                     , UCap
                     , UCap.Domain
                     , UCap.Lens
