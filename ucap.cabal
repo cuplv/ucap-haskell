@@ -18,6 +18,7 @@ library
                     , UCap.Op
                     , UCap.Replica
                     , UCap.Replica.Capconf
+                    , UCap.Replica.Coord
                     , UCap.Replica.Demo
                     , UCap.Replica.PDemo
                     , UCap.Replica.Script
