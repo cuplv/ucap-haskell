@@ -55,6 +55,7 @@ test-suite test
                     , UCapTests
                     , UCap.MapTests
                     , UCap.OpTests
+                    , UCap.Replica.CoordTests
                     , UCap.Replica.DemoTests
                     , UCap.Replica.PDemoTests
                     , UCap.Replica.VClockTests

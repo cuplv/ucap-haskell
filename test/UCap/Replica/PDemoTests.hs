@@ -16,6 +16,7 @@ import Control.Monad.State
 import Control.Monad.Trans
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -52,6 +53,12 @@ intModder2 l1 l2 = do
   transactSimple $ liftOpM t
   intModder2 l1 l2
 
+abUI :: (Cap c) => Capconf String c
+abUI = capsFromList [(alpha,uniC),(beta,idC)] 
+
+abUU :: (Cap c) => Capconf String c
+abUU = capsFromList [(alpha,uniC),(beta,uniC)] 
+
 tqueues = testGroup "Transaction queues" $
   let act1 :: PDemo String (CounterC Int) (State [IntOp ()]) (Int,Int,Int)
       act1 = do
@@ -64,7 +71,8 @@ tqueues = testGroup "Transaction queues" $
         loopPD
         s3 <- lift $ stateD alpha
         return (s1,s2,s3)
-      cc0 = mkUniform (uniC :: CounterC Int) [alpha,beta]
+      -- cc0 = mkUniform (uniC :: CounterC Int) [alpha,beta]
+      cc0 = abUU :: Capconf String (CounterC Int)
       m1 = Map.singleton alpha (intModder id)
       act2 = do
         loopPD
@@ -104,7 +112,7 @@ loops = testGroup "Loops" $
         broadcast "beta"
         s2 <- lift $ stateD "alpha"
         return (r,s1,s2)
-      cc0 = mkUniform uniC ["alpha","beta"]
+      cc0 = abUU
   in [ testCase "Sequential loop" $
          evalPDemo m cc0 mempty 0 (act loopSeqPD) @?= Identity ([],18,18)
      , testCase "Lazy loop" $
@@ -112,23 +120,21 @@ loops = testGroup "Loops" $
      ]
 
 requests = testGroup "Requests" $
-  [ testCase "1 Request" $
-      evalPDemo (Map.fromList [(alpha, await [grantLock])
-                              ,(beta, do ac <- acquireLock
-                                         await [ac])])
-                (mempty :: Capconf String (IdentityC ()))
-                (withLock alpha)
-                ()
-                (do rst1 <- lift get
-                    let a1 = ownsLock alpha $ rst1 ^. coordL alpha
-                    let b1 = ownsLock beta $ rst1 ^. coordL beta
-                    evalRepB beta
-                    evalRepB alpha
-                    rst2 <- lift get
-                    let a2 = ownsLock alpha $ rst2 ^. coordL alpha
-                        b2 = ownsLock beta $ rst2 ^. coordL beta
-                    return (a1,b1,a2,b2))
-      @?= Identity (True,False,False,True)
+  [testCase "1 Request" $
+     evalPDemo (Map.fromList [(alpha, await [grantLock])
+                             ,(beta, do ac <- acquireLock
+                                        await [ac])])
+               (abUI :: Capconf String (CounterC Int))
+               (withLock alpha)
+               0
+               (do loopPD
+                   rst <- lift get
+                   return (rst ^. coordL beta, rst ^. capsL beta))
+     @?= Identity (fst . grantReq alpha . requestLock beta $ withLock alpha
+                  ,acceptG beta
+                   . mdropG alpha idC
+                   . fromJust . transferG alpha (beta,uniC)
+                   $ abUI)
   ]
 
 type MyC = (CounterC Int, ConstC' (IdentityC [Int]))
@@ -153,21 +159,24 @@ s2 = do
 tmany = testGroup "transactMany" $
   [testCase "Single no locks" $
      evalPDemo (Map.fromList [(alpha,s1)])
-               (mkUniform uniC [alpha])
+               -- (mkUniform uniC [alpha])
+               abUI
                mempty
                (0,[])
                (loopPD >> lift (stateD alpha))
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Single with locks" $
      evalPDemo (Map.fromList [(alpha,s1)])
-               (mkUniform uniC [alpha])
+               -- (mkUniform uniC [alpha])
+               abUI
                (withLock alpha)
                (0,[])
                (loopPD >> lift (stateD alpha))
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Two with locks" $
      evalPDemo (Map.fromList [(alpha,s1),(beta,s2)])
-               (mkUniform uniC [alpha]) -- beta is assumed to have idC
+               -- (mkUniform uniC [alpha]) -- beta is assumed to have idC
+               abUI
                (withLock alpha)
                (0,[])
                (loopPD >> broadcast beta >> lift (stateD alpha))

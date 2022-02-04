@@ -127,17 +127,13 @@ loopSeqPD = do
   This imposes inconsistency.  A replica may act upon a view of
   the state that other replicas do not share. -}
 loopPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
-loopPD = loopPD' True
-
-loopPD' tryB = do
+loopPD = do
   rids <- replicaIds
-  progress1 <- or <$> traverse evalRep rids
-  if progress1
-     then loopPD' True
-     else do is <- nonIdle
-             if is /= [] && tryB
-                then traverse_ broadcast rids >> loopPD' False
-                else return is
+  progress <- or <$> traverse evalRep rids
+  nonIs <- nonIdle
+  if progress && not (null nonIs)
+     then traverse_ broadcast rids >> loopPD
+     else return nonIs
 
 addScript :: (Ord i, Monad m) => i -> PScript i c m -> PDemo i c m ()
 addScript i sc = do

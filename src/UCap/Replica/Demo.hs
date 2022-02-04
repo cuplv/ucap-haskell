@@ -147,8 +147,8 @@ applyWriteState
   -> DemoState i c m ()
 applyWriteState i (RepCtx e cc cd) = do
   _1 %= event i e
-  capsL i .= cc
-  coordL i .= cd
+  capsL i %= (<> cc)
+  coordL i %= (<> cd)
 
 {-| Run a transaction, on a particular replica, in the demo simulation. -}
 (.//)
@@ -193,10 +193,16 @@ transactD i op = do
   @i1@. -}
 observeD :: (Ord i, Cap c, Monad m) => i -> i -> DemoState i c m ()
 observeD i1 i2 = do
+  -- Update effect log
   _1 %= observe i1 i2
-  use (_2 . at i2) >>= \case
-    Just cc2 -> _2 %= Map.adjust (<> cc2) i1
-    Nothing -> return ()
+
+  -- Update capabilities
+  cc2 <- use $ capsL i2
+  capsL i1 %= (<> cc2)
+
+  -- Update coord structure
+  cd2 <- use $ coordL i2
+  coordL i1 %= (<> cd2)
 
 {-| @'maskD' i1 (i2,c)@ applies @c@ as a mask to @i1@'s capability, on
   request from @i2@. -}

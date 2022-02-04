@@ -14,6 +14,8 @@ import UCap.Replica.Capconf
 import UCap.Replica.Coord
 import UCap.Replica.Script
 
+import Data.Maybe (fromJust)
+
 {-| Compile an operation into a replica script.  If capabilities are not
   sufficient, 'Nothing' is returned. -}
 transactSimple
@@ -74,7 +76,9 @@ grantLock =
         return $ isRequestedOf rid (ctx ^. rsCoord)
       cont = do
         rid <- getReplicaId
-        onCoord $ grantReq rid
+        newOwner <- onCoord' $ grantReq rid
+        onCapconf $ fromJust . transferG rid (newOwner,uniC)
+        onCapconf $ mdropG rid idC
   in after test cont
 
 {-| Run a list of transactions in sequence, serving coordination requests

@@ -19,6 +19,8 @@ module UCap.Replica.Capconf
   , unmaskAllG''
   , changeMaskAllG
   , mkUniform
+  , capsFromList
+  , capsFlatten
   ) where
 
 import UCap.Domain.Classes
@@ -219,12 +221,9 @@ dropG i c (Capconf m) =
      then Just (Capconf (Map.adjust (newChange (Drop c)) i m))
      else Nothing
 
-mdropG :: (Ord i, Meet c, Monoid c, Split c) => i -> c -> Capconf i c -> Capconf i c
-mdropG _ c cf | c <=? idC = cf
+mdropG :: (Ord i, BMeet c, Monoid c, Split c) => i -> c -> Capconf i c -> Capconf i c
+mdropG _ c cf | uniC <=? c = cf
 mdropG i c (Capconf m) = Capconf (Map.adjust (newChange (MDrop c)) i m)
-  -- if c <=? localG i (Capconf m)
-  --    then Just ()
-  --    else Nothing
 
 depositG :: (Ord i, Meet c, Monoid c, Split c) => i -> (i,c) -> Capconf i c -> Capconf i c
 depositG i (i2,c) (Capconf m) = Capconf $ Map.adjust (depositH i c) i2 m
@@ -273,3 +272,12 @@ mkUniform :: (Ord i, Monoid c) => c -> [i] -> Capconf i c
 mkUniform c is =
   let f i m = Map.insert i (initHist c) m
   in Capconf $ foldr f Map.empty is
+
+capsFromList :: (Ord i, Monoid c) => [(i,c)] -> Capconf i c
+capsFromList l = Capconf $ Map.map initHist (Map.fromList l)
+
+capsFlatten
+  :: (Ord i, Meet c, Monoid c, Split c)
+  => Capconf i c
+  -> Map i c
+capsFlatten (Capconf m) = Map.map (fromJust . getCap) m

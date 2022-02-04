@@ -26,15 +26,19 @@ makeLenses ''Lockconf
 instance (Ord i) => Semigroup (Lockconf i) where
   Lockconf o1 g1 q1 <> Lockconf o2 g2 q2 =
     let o' = case (o1,o2) of
-               (Just i1, _) | g1 >= g2 -> Just i1
-               (_, Just i2) | g1 < g2 -> Just i2
-               _ -> Nothing
+          (Just i1, Just i2) | g1 == g2 && i1 /= i2 ->
+            error "Conflicting claims to lock"
+          (Just i1, _) | g1 >= g2 -> Just i1
+          (_, Just i2) | g1 <= g2 -> Just i2
+          _ -> Nothing
         g' = max g1 g2
-        q' = fr q1 q2
+        q' = fr (drop g' q1) (drop g' q2)
+        fr [] q2 = q2
+        fr q1 [] = q1
         fr (i1:q1) (i2:q2) | i1 == i2 = i1 : fr q1 q2
                            | i1 < i2 = i1 : fr q1 (i2:q2)
                            | i1 > i2 = i2 : fr (i1:q1) q2
-    in Lockconf o1 g1 q1
+    in Lockconf o' g' q'
 
 instance (Ord i) => Monoid (Lockconf i) where
   mempty = Lockconf Nothing 0 []
@@ -64,12 +68,12 @@ ownsLock i1 (Coord (Lockconf (Just i2) _ _)) = i1 == i2
 ownsLock _ _ = False
 
 isRequestedOf :: (Eq i) => i -> Coord i c -> Bool
-isRequestedOf i1 (Coord (Lockconf (Just i2) _ q)) = i1 == i2 && not (null q)
+isRequestedOf i1 (Coord (Lockconf (Just i2) _ (_:_))) = i1 == i2
 isRequestedOf _ _ = False
 
-grantReq :: (Eq i) => i -> Coord i c -> Coord i c
+grantReq :: (Eq i) => i -> Coord i c -> (Coord i c, i)
 grantReq i1 (Coord (Lockconf (Just i2) gen (i3:is)))
-  | i1 == i2 = Coord (Lockconf (Just i3) (gen + 1) is)
+  | i1 == i2 = (Coord (Lockconf (Just i3) (gen + 1) is), i3)
   | otherwise = error "Non-owner tried to grant."
 grantReq _ _ = error "Grant error."
 

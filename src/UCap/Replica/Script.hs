@@ -18,6 +18,7 @@ module UCap.Replica.Script
   , onCapconf
   , setCoord
   , onCoord
+  , onCoord'
   , liftScript
   , module Lang.Rwa
   ) where
@@ -84,7 +85,15 @@ onCoord
   -> ScriptT i c m ()
 onCoord f = setCoord . f . view rsCoord =<< readState
 
-
+onCoord'
+  :: (Ord i, Cap c, Monad m)
+  => (Coord i c -> (Coord i c, a))
+  -> ScriptT i c m a
+onCoord' f = do
+  cd <- view rsCoord <$> readState
+  let (cd',a) = f cd
+  setCoord cd'
+  return a
 
 {-| Perform an action on the underlying monad of the script. -}
 liftScript :: (Monad m) => m a -> ScriptT i c m a
