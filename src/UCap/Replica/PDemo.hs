@@ -42,14 +42,16 @@ evalPDemo
   :: (Ord i, Cap c, Monad m)
   => Map i (PScript i c m)
   -> Capconf i c
+  -> Coord i c
   -> CState c
   -> PDemo i c m a
   -> m a
-evalPDemo psc0 cc0 s0 act =
+evalPDemo psc0 cc0 cd0 s0 act =
   fst
   <$> evalDemo
         (Map.keys psc0)
         cc0
+        cd0
         s0
         (runStateT act (Map.map Running psc0))
 

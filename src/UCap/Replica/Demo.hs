@@ -19,6 +19,7 @@ module UCap.Replica.Demo
   , acceptD
   , maskD
   , capsL
+  , coordL
   , liftDemo
   ) where
 
@@ -67,12 +68,14 @@ evalDemo
   :: (Ord i, Cap c, Monad m)
   => [i]
   -> Capconf i c
+  -> Coord i c
   -> CState c
   -> DemoState i c m a
   -> m a
-evalDemo ps cc0 s0 act = do
+evalDemo ps cc0 cd0 s0 act = do
   let ccs = Map.fromList $ zip ps (repeat cc0)
-  fst <$> runDemo s0 (initThreads,ccs,mempty) act
+  let cds = Map.fromList $ zip ps (repeat cd0)
+  fst <$> runDemo s0 (initThreads,ccs,cds) act
 
 {-| Same as 'evalDemo', but assign all processes the same initial
   capability. -}
@@ -83,7 +86,7 @@ evalDemoU
   -> CState c
   -> DemoState i c m a
   -> m a
-evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps)
+evalDemoU ps c0 = evalDemo ps (mkUniform c0 ps) mempty
 
 evalDemoU'
   :: (Ord i, Cap c)
@@ -92,7 +95,7 @@ evalDemoU'
   -> CState c
   -> DemoState i c Identity a
   -> a
-evalDemoU' ps c0 s0 act = case evalDemo ps (mkUniform c0 ps) s0 act of
+evalDemoU' ps c0 s0 act = case evalDemo ps (mkUniform c0 ps) mempty s0 act of
   Identity a -> a
 
 {-| Run a replica script, on a particular replica, in the demo

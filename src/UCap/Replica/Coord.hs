@@ -2,7 +2,10 @@
 
 module UCap.Replica.Coord
   ( Coord
+  , withLock
   , requestLock
+  , isRequestedOf
+  , grantReq
   , ownsLock
   , Lockconf
   , lockconf
@@ -49,8 +52,27 @@ instance (Ord i, Cap c) => Semigroup (Coord i c) where
 instance (Ord i, Cap c) => Monoid (Coord i c) where
   mempty = Coord mempty
 
-requestLock :: i -> Coord i c -> Coord i c
-requestLock = undefined
+requestLock :: (Ord i) => i -> Coord i c -> Coord i c
+requestLock i1 cd@(Coord (Lockconf (Just i2) gen q))
+  | i1 == i2 = cd
+  | i1 `elem` q = cd
+  | otherwise = Coord (Lockconf (Just i2) gen (q ++ [i1]))
+requestLock _ _ = error "Can't request lock when not owned."
 
-ownsLock :: i -> Coord i c -> Bool
-ownsLock = undefined
+ownsLock :: (Eq i) => i -> Coord i c -> Bool
+ownsLock i1 (Coord (Lockconf (Just i2) _ _)) = i1 == i2
+ownsLock _ _ = False
+
+isRequestedOf :: (Eq i) => i -> Coord i c -> Bool
+isRequestedOf i1 (Coord (Lockconf (Just i2) _ q)) = i1 == i2 && not (null q)
+isRequestedOf _ _ = False
+
+grantReq :: (Eq i) => i -> Coord i c -> Coord i c
+grantReq i1 (Coord (Lockconf (Just i2) gen (i3:is)))
+  | i1 == i2 = Coord (Lockconf (Just i3) (gen + 1) is)
+  | otherwise = error "Non-owner tried to grant."
+grantReq _ _ = error "Grant error."
+
+{-| Initialize the 'Coord' structure with the lock held. -}
+withLock :: i -> Coord i c
+withLock i = Coord (Lockconf (Just i) 0 [])

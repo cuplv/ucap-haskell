@@ -15,6 +15,9 @@ module Lang.Rwa
   , continue
   , nonStop
   , after
+  , looping
+  , andThen
+  , andThen_
   , popQ
   ) where
 
@@ -84,6 +87,18 @@ nonStop a = (const $ return True, return a)
 
 after :: (Monad m) => (ReadRep w -> m Bool) -> Rwa w m a -> AwaitB w m a
 after = (,)
+
+looping :: (Monad m) => [AwaitB w m a] -> Rwa w m ()
+looping acs = await $ map (`andThen_` looping acs) acs
+
+{-| Monadic bind ('>>=') for 'AwaitB', which does not yet have a proper
+  'Monad' instance. -}
+andThen :: (Monad m) => AwaitB w m a -> (a -> Rwa w m b) -> AwaitB w m b
+andThen (test,cont) f = (test, cont >>= f)
+
+{-| '>>' for 'AwaitB'. -}
+andThen_ :: (Monad m) => AwaitB w m a -> Rwa w m b -> AwaitB w m b
+andThen_ (test,cont) m = andThen (test,cont) (const m)
 
 popQ :: (MonadState a m) => Lens' a [b] -> AwaitB w m b
 popQ l =

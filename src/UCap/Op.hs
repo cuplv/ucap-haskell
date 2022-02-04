@@ -8,6 +8,8 @@ module UCap.Op
   , evalOp
   , execOp
   , execWith
+  , readReq
+  , writeReq
   , pipe
   , idOp
   , query
@@ -87,3 +89,11 @@ execWith (Caps cr cw) s (Op r w p b) = case b () of
                  
       (f s)
     _ -> Nothing
+
+{-| Get the read requirement of an operation. -}
+readReq :: Op c m a b -> c
+readReq (Op r _ _ _) = r
+
+{-| Get the write requirement of an operation. -}
+writeReq :: Op c m a b -> c
+writeReq (Op _ w _ _) = w

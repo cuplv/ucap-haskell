@@ -15,7 +15,9 @@ module UCap.Replica.Script
   , getReplicaId
   , emitEffect
   , setCapconf
+  , onCapconf
   , setCoord
+  , onCoord
   , liftScript
   , module Lang.Rwa
   ) where
@@ -55,8 +57,11 @@ type ScriptTerm i c m a = RwaTerm (RepCtx' i c) (ReaderT i m) a
 
 type ScriptB i c m a = AwaitB (RepCtx' i c) (ReaderT i m) a
 
-getReplicaId :: (Monad m) => ScriptT i c m i
+getReplicaId :: (MonadReader i m) => m i
 getReplicaId = ask
+
+-- getReplicaId' :: (Monad m) => ReaderT i m i
+-- getReplicaId' 
 
 emitEffect :: (Ord i, Cap c, Monad m) => CEffect c -> ScriptT i c m ()
 emitEffect e = writeState $ RepCtx e mempty mempty
@@ -66,6 +71,20 @@ setCapconf cc = writeState $ RepCtx mempty cc mempty
 
 setCoord :: (Ord i, Cap c, Monad m) => Coord i c -> ScriptT i c m ()
 setCoord cd = writeState $ RepCtx mempty mempty cd
+
+onCapconf
+  :: (Ord i, Cap c, Monad m)
+  => (Capconf i c -> Capconf i c)
+  -> ScriptT i c m ()
+onCapconf f = setCapconf . f . view rsCapconf =<< readState
+
+onCoord
+  :: (Ord i, Cap c, Monad m)
+  => (Coord i c -> Coord i c)
+  -> ScriptT i c m ()
+onCoord f = setCoord . f . view rsCoord =<< readState
+
+
 
 {-| Perform an action on the underlying monad of the script. -}
 liftScript :: (Monad m) => m a -> ScriptT i c m a
