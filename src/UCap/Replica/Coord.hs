@@ -2,6 +2,8 @@
 
 module UCap.Replica.Coord
   ( Coord
+  , requestLock
+  , ownsLock
   , Lockconf
   , lockconf
   ) where
@@ -46,3 +48,9 @@ instance (Ord i, Cap c) => Semigroup (Coord i c) where
 
 instance (Ord i, Cap c) => Monoid (Coord i c) where
   mempty = Coord mempty
+
+requestLock :: i -> Coord i c -> Coord i c
+requestLock = undefined
+
+ownsLock :: i -> Coord i c -> Bool
+ownsLock = undefined

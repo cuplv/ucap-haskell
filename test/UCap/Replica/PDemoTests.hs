@@ -35,7 +35,7 @@ intModder
   -> PScript i (CounterC Int) (State s)
 intModder l = do
   t <- await [popQ l]
-  transact $ liftOpM t
+  transactSimple $ liftOpM t
   intModder l
 
 intModder2
@@ -45,7 +45,7 @@ intModder2
   -> PScript i (CounterC Int) (State s)
 intModder2 l1 l2 = do
   t <- await [popQ l1, popQ l2]
-  transact $ liftOpM t
+  transactSimple $ liftOpM t
   intModder2 l1 l2
 
 tqueues = testGroup "Transaction queues" $
@@ -89,10 +89,10 @@ tqueues = testGroup "Transaction queues" $
 
 loops = testGroup "Loops" $
   let s1 = do
-        transact (effect $ addE 5)
-        transact (query uniC >>> addOp')
+        transactSimple (effect $ addE 5)
+        transactSimple (query uniC >>> addOp')
         return ()
-      s2 = transact (effect $ addE 8) >> return ()
+      s2 = transactSimple (effect $ addE 8) >> return ()
       m = Map.fromList [("alpha", s1), ("beta", s2)]
       act m = do
         r <- m

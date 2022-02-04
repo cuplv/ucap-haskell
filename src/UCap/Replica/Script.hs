@@ -13,8 +13,10 @@ module UCap.Replica.Script
   , RepCtx'
   , unwrapScript
   , getReplicaId
+  , emitEffect
+  , setCapconf
+  , setCoord
   , liftScript
-  , transact
   , module Lang.Rwa
   ) where
 
@@ -26,8 +28,6 @@ import UCap.Replica.Capconf
 import UCap.Replica.Coord
 
 import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Trans.Free
 
 data RepCtx i c e
   = RepCtx { _rsStore :: e
@@ -58,28 +58,14 @@ type ScriptB i c m a = AwaitB (RepCtx' i c) (ReaderT i m) a
 getReplicaId :: (Monad m) => ScriptT i c m i
 getReplicaId = ask
 
-{-| Compile an operation into a replica script. -}
-transact
-  :: (Ord i, Cap c, Monad m)
-  => Op c m () a
-  -> ScriptT i c m (Maybe a)
-transact op = do
-  rid <- getReplicaId
-  ctx <- readState
-  let s = ctx ^. rsStore
-  let cc = ctx ^. rsCapconf
-  let caps = Caps (remoteG' rid cc) (localG rid cc)
-  case execWith caps s op of
-    Just act -> do
-      (_,e,b) <- liftScript act
-      case consumeG rid e cc of
-        Just cc' -> do
-          let ctx' = ctx
-                & rsStore .~ e
-                & rsCapconf .~ cc'
-          writeState ctx'
-          return (Just b)
-    Nothing -> return Nothing
+emitEffect :: (Ord i, Cap c, Monad m) => CEffect c -> ScriptT i c m ()
+emitEffect e = writeState $ RepCtx e mempty mempty
+
+setCapconf :: (Ord i, Cap c, Monad m) => Capconf i c -> ScriptT i c m ()
+setCapconf cc = writeState $ RepCtx mempty cc mempty
+
+setCoord :: (Ord i, Cap c, Monad m) => Coord i c -> ScriptT i c m ()
+setCoord cd = writeState $ RepCtx mempty mempty cd
 
 {-| Perform an action on the underlying monad of the script. -}
 liftScript :: (Monad m) => m a -> ScriptT i c m a

@@ -12,6 +12,9 @@ module Lang.Rwa
   , writeState
   , await
   , block
+  , continue
+  , nonStop
+  , after
   , popQ
   ) where
 
@@ -70,6 +73,17 @@ await acs = wrap $ Await acs
 
 block :: (Monad m) => (ReadRep w -> Bool) -> Rwa w m ()
 block pr = await [(return . pr, return ())]
+
+continue :: (Monad m) => Rwa w m (AwaitB w m a) -> Rwa w m a
+continue m = do
+  ac <- m
+  await [ac]
+
+nonStop :: (Monad m) => a -> AwaitB w m a
+nonStop a = (const $ return True, return a)
+
+after :: (Monad m) => (ReadRep w -> m Bool) -> Rwa w m a -> AwaitB w m a
+after = (,)
 
 popQ :: (MonadState a m) => Lens' a [b] -> AwaitB w m b
 popQ l =

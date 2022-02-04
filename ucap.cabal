@@ -23,6 +23,7 @@ library
                     , UCap.Replica.Demo
                     , UCap.Replica.PDemo
                     , UCap.Replica.Script
+                    , UCap.Replica.Transact
                     , UCap.Replica.Types
                     , UCap.Replica.VClock
                     , UCap.Replica.VThread

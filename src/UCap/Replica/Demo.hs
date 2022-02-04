@@ -28,6 +28,7 @@ import UCap.Op
 import UCap.Replica.Capconf
 import UCap.Replica.Coord
 import UCap.Replica.Script
+import UCap.Replica.Transact
 import UCap.Replica.Types
 import UCap.Replica.VClock
 import UCap.Replica.VThread
@@ -155,7 +156,7 @@ applyWriteState i (RepCtx e cc cd) = do
                         [ScriptB i c m (Maybe a)]
                         -- (AwaitBs i c m (ScriptT i c m (Maybe a)))
                         (Maybe a))
-i .// op = script i (transact op)
+i .// op = script i (transactSimple op)
 
 {-| Run a replica script that is not expected to block.  If it does
   block, a runtime error will be thrown. -}
