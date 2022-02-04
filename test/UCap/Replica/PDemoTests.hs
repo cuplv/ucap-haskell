@@ -39,7 +39,7 @@ intModder
   => Lens' s [IntOp ()]
   -> PScript i (CounterC Int) (State s)
 intModder l = do
-  t <- await [popQ l]
+  t <- await $ popQ l
   transactSimple $ liftOpM t
   intModder l
 
@@ -49,7 +49,7 @@ intModder2
   -> Lens' s [IntOp ()]
   -> PScript i (CounterC Int) (State s)
 intModder2 l1 l2 = do
-  t <- await [popQ l1, popQ l2]
+  t <- await . firstOf $ [popQ l1, popQ l2]
   transactSimple $ liftOpM t
   intModder2 l1 l2
 
@@ -121,9 +121,9 @@ loops = testGroup "Loops" $
 
 requests = testGroup "Requests" $
   [testCase "1 Request" $
-     evalPDemo (Map.fromList [(alpha, await [grantLock])
+     evalPDemo (Map.fromList [(alpha, await grantLock)
                              ,(beta, do ac <- acquireLock
-                                        await [ac])])
+                                        await ac)])
                (abUI :: Capconf String (CounterC Int))
                (withLock alpha)
                0
@@ -149,17 +149,16 @@ s1 :: ScriptT String MyC Identity ()
 s1 = do
    rs <- transactMany $ map (\n -> op1 n >>> pure n) [1..5]
    transactMany_ [_2ed ^# op2 rs]
-   looping [grantLock]
+   loopBlock grantLock
 
 s2 :: ScriptT String MyC Identity ()
 s2 = do
   transactMany_ $ map op1 [100,200,300,400,500]
-  looping [grantLock]
+  loopBlock grantLock
 
 tmany = testGroup "transactMany" $
   [testCase "Single no locks" $
      evalPDemo (Map.fromList [(alpha,s1)])
-               -- (mkUniform uniC [alpha])
                abUI
                mempty
                (0,[])
@@ -167,7 +166,6 @@ tmany = testGroup "transactMany" $
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Single with locks" $
      evalPDemo (Map.fromList [(alpha,s1)])
-               -- (mkUniform uniC [alpha])
                abUI
                (withLock alpha)
                (0,[])
@@ -175,7 +173,6 @@ tmany = testGroup "transactMany" $
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Two with locks" $
      evalPDemo (Map.fromList [(alpha,s1),(beta,s2)])
-               -- (mkUniform uniC [alpha]) -- beta is assumed to have idC
                abUI
                (withLock alpha)
                (0,[])

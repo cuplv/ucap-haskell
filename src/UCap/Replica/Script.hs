@@ -24,6 +24,7 @@ module UCap.Replica.Script
   ) where
 
 import Lang.Rwa
+import Lang.Rwa.Interpret
 import UCap.Domain
 import UCap.Lens
 import UCap.Op
@@ -56,7 +57,7 @@ type ScriptT i c m a = Rwa (RepCtx' i c) (ReaderT i m) a
 
 type ScriptTerm i c m a = RwaTerm (RepCtx' i c) (ReaderT i m) a
 
-type ScriptB i c m a = AwaitB (RepCtx' i c) (ReaderT i m) a
+type ScriptB i c m a = Block (RepCtx' i c) (ReaderT i m) (ScriptT i c m a)
 
 getReplicaId :: (MonadReader i m) => m i
 getReplicaId = ask
@@ -105,5 +106,5 @@ unwrapScript
   :: (Monad m)
   => ScriptT i c m a
   -> i
-  -> m (Either (ScriptTerm i c m a) a)
+  -> m (Either (ScriptTerm i c m (ScriptT i c m a)) a)
 unwrapScript sc i = runReaderT (nextTerm sc) i

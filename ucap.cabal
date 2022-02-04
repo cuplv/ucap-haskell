@@ -12,6 +12,7 @@ library
                     , Data.InfMap
                     , Data.InfSet
                     , Lang.Rwa
+                    , Lang.Rwa.Interpret
                     , UCap
                     , UCap.Domain
                     , UCap.Lens
@@ -27,7 +28,8 @@ library
                     , UCap.Replica.Types
                     , UCap.Replica.VClock
                     , UCap.Replica.VThread
-    other-modules:    UCap.Domain.Classes
+    other-modules:    Lang.Rwa.Internal
+                    , UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
                     , UCap.Domain.Identity

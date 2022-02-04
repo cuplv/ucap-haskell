@@ -48,38 +48,36 @@ transact
 transact op = do
   r <- transactSimple op
   case r of
-    Just a -> return $ nonStop a
+    Just a -> return . nonBlock . return $ a
     Nothing -> do
-      (test,cont) <- acquireLock
-      let cont' = cont >> do
-            r <- transactSimple op
-            case r of
-              Just a -> return a
-              Nothing -> error "Transaction not enabled even with lock."
-      return (test,cont')
+      b <- acquireLock
+      return $ b `andThen_` do
+        r <- transactSimple op
+        case r of
+          Just a -> return a
+          Nothing -> error "Transaction not enabled even with lock."
 
 {-| Acquire lock, or pass immediately if lock is already owned. -}
 acquireLock :: (Ord i, Cap c, Monad m) => ScriptT i c m (ScriptB i c m ())
 acquireLock = do
   rid <- getReplicaId
   onCoord $ requestLock rid
-  return $ after
-    (return . ownsLock rid . view rsCoord)
-    (onCapconf $ acceptG rid)
+  return $ do
+    cd <- view rsCoord <$> checkState
+    ownsLock rid cd ?> onCapconf (acceptG rid)
 
 {-| Block until this replica is the lock owner and the lock is requested
   by another, and then grant it. -}
 grantLock :: (Ord i, Cap c, Monad m) => ScriptB i c m ()
-grantLock =
-  let test ctx = do
-        rid <- getReplicaId
-        return $ isRequestedOf rid (ctx ^. rsCoord)
-      cont = do
-        rid <- getReplicaId
-        newOwner <- onCoord' $ grantReq rid
-        onCapconf $ fromJust . transferG rid (newOwner,uniC)
-        onCapconf $ mdropG rid idC
-  in after test cont
+grantLock = do
+  let lockOwnerCap = uniC
+  let nonOwnerCap = idC
+  ctx <- checkState
+  rid <- lift getReplicaId
+  isRequestedOf rid (ctx ^. rsCoord) ?> do
+    newOwner <- onCoord' $ grantReq rid
+    onCapconf $ fromJust . transferG rid (newOwner,lockOwnerCap)
+    onCapconf $ mdropG rid nonOwnerCap
 
 {-| Run a list of transactions in sequence, serving coordination requests
   in between and when blocked. -}
@@ -89,10 +87,10 @@ transactMany
   -> ScriptT i c m [a]
 transactMany [] = return []
 transactMany (o1:os) = do
-  ac <- transact o1
-  await
-    [grantLock `andThen_` transactMany (o1:os)
-    ,ac `andThen` (\a -> (a :) <$> transactMany os)
+  complete1 <- transact o1
+  await . firstOf $
+    [ grantLock `andThen_` transactMany (o1:os)
+    , complete1 `andThen` (\a -> (a :) <$> transactMany os)
     ]
 
 {-| A version of 'transactMany' which discard return values.  This is
@@ -104,8 +102,8 @@ transactMany_
   -> ScriptT i c m ()
 transactMany_ [] = return ()
 transactMany_ (o1:os) = do
-  ac <- transact o1
-  await
-    [grantLock `andThen_` transactMany_ (o1:os)
-    , ac `andThen_` transactMany_ os
+  complete1 <- transact o1
+  await . firstOf $
+    [ grantLock `andThen_` transactMany_ (o1:os)
+    , complete1 `andThen_` transactMany_ os
     ]

@@ -18,7 +18,7 @@ type PScript i c m = ScriptT i c m ()
 data RepState i c m
   = Idle
   | Running (PScript i c m)
-  | Waiting [ScriptB i c m ()]
+  | Waiting (ScriptB i c m ())
 
 isIdle :: RepState i c m -> Bool
 isIdle Idle = True
@@ -144,7 +144,7 @@ addScript i sc = do
     Just (Running sc0) ->
       at i .= Just (Running $ sc0 >> sc)
     Just (Waiting acs) ->
-      at i .= Just (Waiting $ map (\(ac,sc0) -> (ac, sc0 >> sc)) acs)
+      at i .= Just (Waiting $ acs `andThen_` sc)
 
 {-| @'unicast i1 i2'@ sends an update from @i1@ to @i2@.  After doing
   so, @i2@ will have seen all events that @i1@ has, and @i2@'s

@@ -23,6 +23,8 @@ module UCap.Replica.Demo
   , liftDemo
   ) where
 
+import Lang.Rwa
+import Lang.Rwa.Interpret
 import UCap
 import UCap.Lens
 import UCap.Op
@@ -104,7 +106,7 @@ script
   :: (Ord i, Cap c, Monad m)
   => i
   -> ScriptT i c m a
-  -> DemoState i c m (Either [ScriptB i c m a] a)
+  -> DemoState i c m (Either (ScriptB i c m a) a)
 script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (ReadState f) ->
     script i . f =<< assembleReadState i
@@ -115,20 +117,14 @@ script i sc = liftDemo (unwrapScript sc i) >>= \case
     Nothing -> return (Left acs)
   Right a -> return (Right a)
 
-findM :: (Monad m) => [(a -> m Bool, b)] -> a -> m (Maybe b)
-findM [] _ = return Nothing
-findM ((ac,a) : acs) state = ac state >>= \case
-  True -> return (Just a)
-  False -> findM acs state
-
 tryAwait
   :: (Ord i, Cap c, Monad m)
   => i
-  -> [ScriptB i c m a]
+  -> ScriptB i c m a
   -> DemoState i c m (Maybe (ScriptT i c m a))
-tryAwait i acs = do
+tryAwait i b = do
   state <- assembleReadState i
-  liftDemo $ runReaderT (findM acs state) i
+  liftDemo $ runReaderT (checkBlock b state) i
 
 assembleReadState
   :: (Ord i, Cap c, Monad m)
@@ -156,8 +152,7 @@ applyWriteState i (RepCtx e cc cd) = do
   => i
   -> Op c m () a
   -> DemoState i c m (Either
-                        [ScriptB i c m (Maybe a)]
-                        -- (AwaitBs i c m (ScriptT i c m (Maybe a)))
+                        (ScriptB i c m (Maybe a))
                         (Maybe a))
 i .// op = script i (transactSimple op)
 
