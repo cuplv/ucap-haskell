@@ -67,8 +67,8 @@ instance (Ord n) => BMeet (AddBound n) where
 
 instance (Num n, Ord n) => Split (AddBound n) where
   split (AddBounded n1) (AddBounded n2)
-    | n1 >= n2 = Just $ AddBounded (n1 - n2)
-    | otherwise = Nothing
+    | n1 >= n2 = Right $ AddBounded (n1 - n2)
+    | otherwise = Left $ AddBounded (n2 - n1)
   split (AddBounded _) AddInfinite = Nothing
   split AddInfinite _ = Just AddInfinite
 
@@ -86,20 +86,20 @@ instance (FromJSON n, FromJSONKey n) => FromJSONKey (MulBound n)
 instance (ToJSON n) => ToJSON (MulBound n)
 instance (ToJSON n, ToJSONKey n) => ToJSONKey (MulBound n)
 
-mulB :: (Num n, Ord n) => n -> MulBound n
+mulB :: (Integral n, Ord n) => n -> MulBound n
 mulB n | n >= mulId = MulBounded n
        | otherwise = error "Can't construct mul bound < 1"
 
-mulFun :: (Num n) => MulBound n -> Maybe n
+mulFun :: (Integral n) => MulBound n -> Maybe n
 mulFun (MulBounded n) = Just n
 mulFun MulInfinite = Nothing
 
-instance (Num n) => Semigroup (MulBound n) where
+instance (Integral n) => Semigroup (MulBound n) where
   MulBounded n1 <> MulBounded n2 = MulBounded (n1 * n2)
   _ <> MulInfinite = MulInfinite
   MulInfinite <> _ = MulInfinite
 
-instance (Num n) => Monoid (MulBound n) where
+instance (Integral n) => Monoid (MulBound n) where
   mempty = MulBounded mulId
 
 instance (Ord n) => Meet (MulBound n) where
@@ -114,9 +114,9 @@ instance (Ord n) => Meet (MulBound n) where
 instance (Ord n) => BMeet (MulBound n) where
   meetId = MulInfinite
 
-instance (Num n, Ord n) => Split (MulBound n) where
+instance (Integral n, Ord n) => Split (MulBound n) where
   split (MulBounded n1) (MulBounded n2)
-    | n1 >= n2 = Just $ MulBounded n1 -- TODO
-    | otherwise = Nothing
+    | n1 >= n2 = Right . AddBounded $ n1 `div` n2
+    | otherwise = Left . AddBounded $ n2 `div` n1
   split (MulBounded _) MulInfinite = Nothing
   split MulInfinite _ = Just MulInfinite

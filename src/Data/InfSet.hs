@@ -65,8 +65,8 @@ instance (Ord a) => BMeet (InfSet a) where
 
 instance (Ord a) => Split (InfSet a) where
   split a b = if b <=? a
-                 then Just $ difference a b
-                 else Nothing
+                 then Right $ difference a b
+                 else Left $ difference b a
 
 -- | Set membership for 'IDSet'.
 member :: (Ord a) => a -> InfSet a -> Bool

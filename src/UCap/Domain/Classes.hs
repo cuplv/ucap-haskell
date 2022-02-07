@@ -11,8 +11,16 @@ module UCap.Domain.Classes
   , Meet (..)
   , BMeet (..)
   , Split (..)
+  , splitWF
+  , WhenFail (..)
+  , failMempty
+  , failToEither
+  , (<<$$>>)
   , CState
   ) where
+
+import Data.Bifunctor
+import Data.Biapplicative
 
 comm3 a b c = (a,b,c)
 
@@ -123,27 +131,43 @@ instance (BMeet a, BMeet b, BMeet c, BMeet d) => BMeet (a,b,c,d) where
     law:
 
 @
-'split' a1 a2 = 'Maybe.Just' a3
+'split' a1 a2 = 'Data.Either.Right' a3
 iff
 a1 = a2 'Semigroup.<>' a3
 @
 -}
-class (Eq a, Monoid a) => Split a where
-  split :: a -> a -> Maybe a
-  split a1 a2 | a1 == a2 = Just mempty
-              | a2 == mempty = Just a1
-              | otherwise = Nothing
+class (Meet a, Monoid a) => Split a where
+  split :: a -> a -> Either a a
+  split a1 a2 | a2 <=? a1 = Right mempty
+              | otherwise = Left a2
+
+splitWF :: (Split a) => a -> a -> WhenFail a a
+splitWF a1 a2 = case split a1 a2 of
+                 Right a3 -> failMempty a3
+                 Left a3 -> DidFail a3
 
 instance Split ()
 
 instance (Split a, Split b) => Split (a,b) where
-  split (a1,b1) (a2,b2) = (,) <$> split a1 a2 <*> split b1 b2
+  split (a1,b1) (a2,b2) = failToEither $
+    (,) <<$$>> splitWF a1 a2 <<*>> splitWF b1 b2
+    -- bimap (,) (,) (splitWF a1 a2) <<*>> splitWF b1 b2
+    -- ((,) `bimap` splitWF a1 a2) <<*>> splitWF b1 b2
+  --   case (split a1 a2, split b1 b2) of
+  --     (Right a3, Right b3) -> Right (a3,b3)
+  --     (a3,b3) -> Left (fom a3, fom b3)
 
-instance (Split a, Split b, Split c) => Split (a,b,c) where
-  split (a1,b1,c1) (a2,b2,c2) = comm3 <$> split a1 a2 <*> split b1 b2 <*> split c1 c2
+-- instance (Split a, Split b, Split c) => Split (a,b,c) where
+--   split (a1,b1,c1) (a2,b2,c2) =
+--     case (split a1 a2, split b1 b2, split c1 c2) of
+--       (Right a3, Right b3, Right c3) -> Right (a3,b3,c3)
+--       (a3,b3,c3) -> Left (fom a3, fom b3, fom c3)
 
-instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
-  split (a1,b1,c1,d1) (a2,b2,c2,d2) = comm4 <$> split a1 a2 <*> split b1 b2 <*> split c1 c2 <*> split d1 d2
+-- instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
+--   split (a1,b1,c1,d1) (a2,b2,c2,d2) =
+--     case (split a1 a2, split b1 b2, split c1 c2, split d1 d2) of
+--       (Right a3, Right b3, Right c3, Right d3) -> Right (a3,b3,c3,d3)
+--       (a3,b3,c3,d3) -> Left (fom a3, fom b3, fom c3, fom d3)
 
 class (BMeet c, Split c, EffectDom (CEffect c)) => Cap c where
   type CEffect c
@@ -190,3 +214,38 @@ idC = mempty
 -}
 uniC :: (BMeet c) => c
 uniC = meetId
+
+{-| A monad representing failure, like 'Either' is used. The difference
+  here is that even when successful, an error value is recorded to be
+  used if failure occurs further down the computation. -}
+
+data WhenFail e a
+  = WhenFail e a
+  | DidFail e
+  deriving (Show,Eq,Ord)
+
+instance Functor (WhenFail e) where
+  fmap f (WhenFail e a) = WhenFail e (f a)
+  fmap _ (DidFail e) = DidFail e
+
+instance Bifunctor WhenFail where
+  bimap fe fa (WhenFail e a) = WhenFail (fe e) (fa a)
+  bimap fe _ (DidFail e) = DidFail (fe e)
+
+instance Biapplicative WhenFail where
+  bipure = WhenFail
+
+  WhenFail fe fa <<*>> WhenFail e a = WhenFail (fe e) (fa a)
+  WhenFail fe fa <<*>> DidFail e = DidFail (fe e)
+  DidFail fe <<*>> WhenFail e a = DidFail (fe e)
+  DidFail fe <<*>> DidFail e = DidFail (fe e)
+
+failMempty :: (Monoid a) => a -> WhenFail a a
+failMempty a = WhenFail mempty a
+
+failToEither :: WhenFail e a -> Either e a
+failToEither (WhenFail _ a) = Right a
+failToEither (DidFail e) = Left e
+
+(<<$$>>) :: (Bifunctor m) => (a -> b) -> m a a -> m b b
+(<<$$>>) f = bimap f f
