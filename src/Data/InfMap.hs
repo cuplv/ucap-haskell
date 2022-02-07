@@ -22,6 +22,8 @@ module Data.InfMap
 import UCap.Domain.Classes
 
 import Data.Aeson
+import Data.Bifunctor
+import Data.Biapplicative
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
@@ -48,7 +50,7 @@ instance (Ord k, BMeet v) => BMeet (InfMap k v) where
   meetId = uniform meetId
 
 instance (Ord k, Split v) => Split (InfMap k v) where
-  split = unionWithA split
+  split a b = failToEither $ unionWithBia splitWF a b
 
 uniform :: v -> InfMap k v
 uniform v = InfMap v Map.empty
@@ -111,6 +113,14 @@ unionWithA f (InfMap v01 m1) (InfMap v02 m2) =
             m1
             m2
   in InfMap <$> f v01 v02 <*> m
+
+unionWithBia
+  :: (Ord k, Biapplicative p)
+  => (a1 -> a2 -> p b1 b2)
+  -> InfMap k a1
+  -> InfMap k a2
+  -> p (InfMap k b1) (InfMap k b2)
+unionWithBia f (InfMap bv1 m1) (InfMap bv2 m2) = undefined
 
 union :: (Ord k) => InfMap k v -> InfMap k v -> InfMap k v
 union = unionWith (\a _ -> a)

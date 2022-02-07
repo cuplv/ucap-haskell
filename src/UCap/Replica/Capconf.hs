@@ -21,6 +21,7 @@ module UCap.Replica.Capconf
   , mkUniform
   , capsFromList
   , capsFlatten
+  , isEmpty
   ) where
 
 import UCap.Domain.Classes
@@ -45,7 +46,9 @@ instance (FromJSON i, FromJSON c) => FromJSON (Change i c)
 
 change :: (Meet c, Monoid c, Split c) => c -> Change i c -> Maybe c
 change a (Gain b) = Just (a <> b)
-change a (Drop b) = split a b
+change a (Drop b) = case split a b of
+                      Right c -> Just c
+                      _ -> Nothing
 change a (MDrop b) = Just (a `meet` b)
 change a (Mask _ b) = Just (a `meet` b)
 change a Unmasked = Just a
@@ -195,7 +198,7 @@ instance
 localG :: (Ord i, Meet c, Monoid c, Split c) => i -> Capconf i c -> c
 localG i (Capconf m) = case Map.lookup i m of
   Just h -> fromJust $ getCap h
-  Nothing -> mempty
+  Nothing -> error "Not safe to assume mempty."
 
 -- | Get map of capabilities held by remote replicas (dropping masks
 -- imposed by remote replicas).
@@ -281,3 +284,6 @@ capsFlatten
   => Capconf i c
   -> Map i c
 capsFlatten (Capconf m) = Map.map (fromJust . getCap) m
+
+isEmpty :: Capconf i c -> Bool
+isEmpty (Capconf m) = null m

@@ -95,8 +95,8 @@ pipeRL
   -> Op c m a1 a3
 pipeRL (Op r2 w2 p2 b2) (Op r1 w1 p1 b1) =
   let (w3,p3) = case (split w2 p1, split p1 w2) of
-                  (Just w2',_) -> (w1 <> w2', p2)
-                  (_,Just p1') -> (w1, p1' <> p2)
+                  (Right w2',_) -> (w1 <> w2', p2)
+                  (_,Right p1') -> (w1, p1' <> p2)
                   _ -> (w1 <> w2, p1 <> p2)
       r3 = r1 `meet` r2
       b3 a = b1 a >>= b2

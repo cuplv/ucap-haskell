@@ -5,6 +5,10 @@ module UCap.Lens
   , (/\~)
   , meetTo
   , plusTo
+  , nani
+  , nonNull
+  , nonList
+  , nonMap
   ) where
 
 import UCap.Domain.Classes (Meet (..), BMeet (..))

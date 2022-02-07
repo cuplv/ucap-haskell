@@ -99,8 +99,8 @@ instance
   , Split c1
   , Split c2
   ) => Split (EitherC c1 c2 s1 s2) where
-  split (EitherC c1 c2) (EitherC d1 d2) =
-    EitherC <$> split c1 d1 <*> split c2 d2
+  split (EitherC c1 c2) (EitherC d1 d2) = failToEither $
+    EitherC <<$$>> splitWF c1 d1 <<*>> splitWF c2 d2
 
 instance
   ( Ord s1

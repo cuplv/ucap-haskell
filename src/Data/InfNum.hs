@@ -69,8 +69,8 @@ instance (Num n, Ord n) => Split (AddBound n) where
   split (AddBounded n1) (AddBounded n2)
     | n1 >= n2 = Right $ AddBounded (n1 - n2)
     | otherwise = Left $ AddBounded (n2 - n1)
-  split (AddBounded _) AddInfinite = Nothing
-  split AddInfinite _ = Just AddInfinite
+  split (AddBounded _) AddInfinite = Left AddInfinite
+  split AddInfinite _ = Right AddInfinite
 
 data MulBound n
   = MulBounded n
@@ -116,7 +116,7 @@ instance (Ord n) => BMeet (MulBound n) where
 
 instance (Integral n, Ord n) => Split (MulBound n) where
   split (MulBounded n1) (MulBounded n2)
-    | n1 >= n2 = Right . AddBounded $ n1 `div` n2
-    | otherwise = Left . AddBounded $ n2 `div` n1
-  split (MulBounded _) MulInfinite = Nothing
-  split MulInfinite _ = Just MulInfinite
+    | n1 >= n2 = Right . MulBounded $ n1 `div` n2
+    | otherwise = Left . MulBounded $ n2 `div` n1
+  split (MulBounded _) MulInfinite = Left MulInfinite
+  split MulInfinite _ = Right MulInfinite

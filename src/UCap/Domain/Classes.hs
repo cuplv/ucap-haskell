@@ -16,6 +16,7 @@ module UCap.Domain.Classes
   , failMempty
   , failToEither
   , (<<$$>>)
+  , (<<*>>)
   , CState
   ) where
 
@@ -151,23 +152,14 @@ instance Split ()
 instance (Split a, Split b) => Split (a,b) where
   split (a1,b1) (a2,b2) = failToEither $
     (,) <<$$>> splitWF a1 a2 <<*>> splitWF b1 b2
-    -- bimap (,) (,) (splitWF a1 a2) <<*>> splitWF b1 b2
-    -- ((,) `bimap` splitWF a1 a2) <<*>> splitWF b1 b2
-  --   case (split a1 a2, split b1 b2) of
-  --     (Right a3, Right b3) -> Right (a3,b3)
-  --     (a3,b3) -> Left (fom a3, fom b3)
 
--- instance (Split a, Split b, Split c) => Split (a,b,c) where
---   split (a1,b1,c1) (a2,b2,c2) =
---     case (split a1 a2, split b1 b2, split c1 c2) of
---       (Right a3, Right b3, Right c3) -> Right (a3,b3,c3)
---       (a3,b3,c3) -> Left (fom a3, fom b3, fom c3)
+instance (Split a, Split b, Split c) => Split (a,b,c) where
+  split (a1,b1,c1) (a2,b2,c2) = failToEither $
+    (,,) <<$$>> splitWF a1 a2 <<*>> splitWF b1 b2 <<*>> splitWF c1 c2
 
--- instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
---   split (a1,b1,c1,d1) (a2,b2,c2,d2) =
---     case (split a1 a2, split b1 b2, split c1 c2, split d1 d2) of
---       (Right a3, Right b3, Right c3, Right d3) -> Right (a3,b3,c3,d3)
---       (a3,b3,c3,d3) -> Left (fom a3, fom b3, fom c3, fom d3)
+instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
+  split (a1,b1,c1,d1) (a2,b2,c2,d2) = failToEither $
+    (,,,) <<$$>> splitWF a1 a2 <<*>> splitWF b1 b2 <<*>> splitWF c1 c2 <<*>> splitWF d1 d2
 
 class (BMeet c, Split c, EffectDom (CEffect c)) => Cap c where
   type CEffect c

@@ -251,7 +251,7 @@ stateD i = eFun <$> allEffectsD i <*> initialState
 
 {-| A lens to the 'Capconf' for a process ID. -}
 capsL :: (Ord i, Cap c) => i -> Lens' (RState i c) (Capconf i c)
-capsL i = _2 . at i . non mempty
+capsL i = _2 . at i . nani mempty isEmpty
 
 coordL :: (Ord i, Cap c) => i -> Lens' (RState i c) (Coord i c)
 coordL i = _3 . at i . non mempty

@@ -28,7 +28,7 @@ import UCap.Domain.Classes
 import UCap.Domain.Const
 
 {-| 'CounterE' provides addition, subtraction, and (positive)
-  multiplication effects on 'Num' values.
+  multiplication effects on 'Integral' values.
 -}
 type CounterE n = ConstE' (MulAdd n)
 
@@ -42,15 +42,15 @@ instance (ToJSON n) => ToJSON (MulAdd n) where
   toEncoding = genericToEncoding defaultOptions
 instance (FromJSON n) => FromJSON (MulAdd n)
 
-instance (Num n) => Semigroup (MulAdd n) where
+instance (Integral n) => Semigroup (MulAdd n) where
   MulAdd m1 a1 <> MulAdd m2 a2 =
     -- Distributing multiplication over addition.
     MulAdd (m1 * m2) (a1 * m2 + a2)
 
-instance (Num n) => Monoid (MulAdd n) where
+instance (Integral n) => Monoid (MulAdd n) where
   mempty = MulAdd 1 0
 
-instance (Num n) => EffectDom (MulAdd n) where
+instance (Integral n) => EffectDom (MulAdd n) where
   type EDState (MulAdd n) = n
   eFun (MulAdd m a) s = s * m + a
 
@@ -63,7 +63,7 @@ instance (Num n) => EffectDom (MulAdd n) where
 'eFun' ('addE' 0) = 'Data.Function.id'
 @
 -}
-addE :: (Ord n, Num n) => n -> CounterE n
+addE :: (Ord n, Integral n) => n -> CounterE n
 addE n | n >= 0 = ModifyE (MulAdd mulId n)
        | otherwise = error $ "Negative value applied to addE."
 
@@ -75,7 +75,7 @@ addE n | n >= 0 = ModifyE (MulAdd mulId n)
 'eFun' ('subE' 0) = 'Data.Function.id'
 @
 -}
-subE :: (Ord n, Num n) => n -> CounterE n
+subE :: (Ord n, Integral n) => n -> CounterE n
 subE n | n >= 0 = ModifyE (MulAdd mulId (-n))
        | otherwise = error $ "Negative value applied to subE."
 
@@ -87,15 +87,15 @@ subE n | n >= 0 = ModifyE (MulAdd mulId (-n))
 'eFun' ('mulE' 1) = 'Data.Function.id'
 @
 -}
-mulE :: (Ord n, Num n) => n -> CounterE n
+mulE :: (Ord n, Integral n) => n -> CounterE n
 mulE n | n >= 0 = ModifyE (MulAdd n addId)
        | otherwise = error $ "Negative value applied to mulE."
 
-isAddE :: (Ord n, Num n) => CounterE n -> Bool
+isAddE :: (Ord n, Integral n) => CounterE n -> Bool
 isAddE (ModifyE (MulAdd m a)) = m == mulId && a > addId
 isAddE _ = False
 
-isSubE :: (Ord n, Num n) => CounterE n -> Bool
+isSubE :: (Ord n, Integral n) => CounterE n -> Bool
 isSubE (ModifyE (MulAdd m a)) = m == mulId && a < addId
 isSubE _ = False
 
@@ -110,7 +110,7 @@ isSubE _ = False
 'additive' ('mulE' 1 'Data.Semigroup.<>' 'addE' 1) = 'True'
 @
 -}
-additive :: (Eq n, Num n) => MulAdd n -> Bool
+additive :: (Eq n, Integral n) => MulAdd n -> Bool
 additive (MulAdd m _) = m == mulId
 
 data Bounds n
@@ -120,7 +120,7 @@ data Bounds n
            }
   deriving (Eq,Ord,Generic)
 
-instance (Ord n, Num n, Show n) => Show (Bounds n) where
+instance (Ord n, Integral n, Show n) => Show (Bounds n) where
   show (Bounds a s m) = 
     "["
     ++ (if not $ a <=? mempty
@@ -140,45 +140,45 @@ instance (ToJSON n, ToJSONKey n) => ToJSONKey (Bounds n)
 instance (FromJSON n) => FromJSON (Bounds n)
 instance (FromJSON n, FromJSONKey n) => FromJSONKey (Bounds n)
 
-addC' :: (Num n, Ord n) => n -> Bounds n
+addC' :: (Integral n, Ord n) => n -> Bounds n
 addC' n = Bounds (addB n) mempty mempty
 
-subC' :: (Num n, Ord n) => n -> Bounds n
+subC' :: (Integral n, Ord n) => n -> Bounds n
 subC' n = Bounds mempty (addB n) mempty
 
-mulC' :: (Num n, Ord n) => n -> Bounds n
+mulC' :: (Integral n, Ord n) => n -> Bounds n
 mulC' n = Bounds mempty mempty (mulB n)
 
-addAny' :: (Num n, Ord n) => Bounds n
+addAny' :: (Integral n, Ord n) => Bounds n
 addAny' = Bounds meetId mempty mempty
 
-subAny' :: (Num n, Ord n) => Bounds n
+subAny' :: (Integral n, Ord n) => Bounds n
 subAny' = Bounds mempty meetId mempty
 
-mulAny' :: (Num n, Ord n) => Bounds n
+mulAny' :: (Integral n, Ord n) => Bounds n
 mulAny' = Bounds mempty mempty meetId
 
-instance (Num n) => Semigroup (Bounds n) where
+instance (Integral n) => Semigroup (Bounds n) where
   Bounds a1 s1 m1 <> Bounds a2 s2 m2 =
     Bounds (a1 <> a2) (s1 <> s2) (m1 <> m2)
 
-instance (Num n) => Monoid (Bounds n) where
+instance (Integral n) => Monoid (Bounds n) where
   mempty = Bounds mempty mempty mempty
 
-instance (Num n, Ord n) => Meet (Bounds n) where
+instance (Integral n, Ord n) => Meet (Bounds n) where
   meet (Bounds a1 s1 m1) (Bounds a2 s2 m2) =
     Bounds (a1 `meet` a2) (s1 `meet` s2) (m1 `meet` m2)
   (<=?) (Bounds a1 s1 m1) (Bounds a2 s2 m2) =
     a1 <=? a2 && s1 <=? s2 && m1 <=? m2
 
-instance (Num n, Ord n) => BMeet (Bounds n) where
+instance (Integral n, Ord n) => BMeet (Bounds n) where
   meetId = Bounds meetId meetId meetId
 
-instance (Num n, Ord n) => Split (Bounds n) where
-  split (Bounds a1 s1 m1) (Bounds a2 s2 m2) =
-    Bounds <$> split a1 a2 <*> split s1 s2 <*> split m1 m2
+instance (Integral n, Ord n) => Split (Bounds n) where
+  split (Bounds a1 s1 m1) (Bounds a2 s2 m2) = failToEither $
+    Bounds <<$$>> splitWF a1 a2 <<*>> splitWF s1 s2 <<*>> splitWF m1 m2
 
-instance (Num n, Ord n) => Cap (Bounds n) where
+instance (Integral n, Ord n) => Cap (Bounds n) where
   type CEffect (Bounds n) = MulAdd n
   mincap e = if addAmt e >= addId
                 then Bounds (addB $ addAmt e) mempty (mulB $ mulAmt e)
@@ -199,22 +199,22 @@ instance (Num n, Ord n) => Cap (Bounds n) where
 
 type CounterC n = ConstC' (Bounds n)
 
-addC :: (Num n, Ord n) => n -> CounterC n
+addC :: (Integral n, Ord n) => n -> CounterC n
 addC = modifyC . addC'
 
-addAny :: (Num n, Ord n) => CounterC n
+addAny :: (Integral n, Ord n) => CounterC n
 addAny = modifyC addAny'
 
-subC :: (Num n, Ord n) => n -> CounterC n
+subC :: (Integral n, Ord n) => n -> CounterC n
 subC = modifyC . subC'
 
-subAny :: (Num n, Ord n) => CounterC n
+subAny :: (Integral n, Ord n) => CounterC n
 subAny = modifyC subAny'
 
-mulC :: (Num n, Ord n) => n -> CounterC n
+mulC :: (Integral n, Ord n) => n -> CounterC n
 mulC = modifyC . mulC'
 
-mulAny :: (Num n, Ord n) => CounterC n
+mulAny :: (Integral n, Ord n) => CounterC n
 mulAny = modifyC mulAny'
 
 divup :: [String] -> CounterE Int -> [(String,CounterE Int)]

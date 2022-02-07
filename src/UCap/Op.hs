@@ -81,12 +81,12 @@ execWith
   -> Maybe (m (Caps c, CEffect c, b))
 execWith (Caps cr cw) s (Op r w p b) = case b () of
   OpBody f -> case split cw w of
-    Just w' | cr <=? r -> Just $ fmap
+    Right w' | cr <=? r -> Just $ fmap
       (\(e,b) -> if not (p <=? undo e) || not (mincap e <=? w)
-                    then error $ "Write failure."
-                    else let caps' = Caps cr (w' <> undo e)
-                         in (caps',e,b))
-                 
+                  then error $ "Write failure."
+                  else let caps' = Caps cr (w' <> undo e)
+                       in (caps',e,b))
+
       (f s)
     _ -> Nothing
 

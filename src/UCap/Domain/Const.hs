@@ -9,6 +9,7 @@ import Data.InfSet (InfSet)
 import qualified Data.InfSet as IS
 
 import Data.Aeson
+import Data.Biapplicative
 import GHC.Generics
 
 {-| t'ConstE' wraps an effect domain (@e@), adding an effect that
@@ -83,10 +84,11 @@ instance (Ord s, BMeet c) => BMeet (ConstC c s) where
   meetId = ConstC IS.universal meetId
 
 instance (Ord s, Split c) => Split (ConstC c s) where
-  split (ConstC s1 c1) (ConstC s2 c2) =
-    if s2 `IS.isSubsetOf` s1
-       then ConstC s1 <$> split c1 c2
-       else Nothing
+  split (ConstC s1 c1) (ConstC s2 c2) = failToEither $
+    ConstC <<$$>> splitWF s1 s2 <<*>> splitWF c1 c2
+    -- if s2 `IS.isSubsetOf` s1
+    --    then ConstC s1 <$> split c1 c2
+    --    else Nothing
 
 instance (Ord s, Meet c, Cap c, Split c, CState c ~ s) => Cap (ConstC c s) where
   type CEffect (ConstC c s) = ConstE (CEffect c) s

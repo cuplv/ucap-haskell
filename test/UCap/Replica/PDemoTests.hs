@@ -21,7 +21,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 testPDemo = testGroup "PDemo"
-  [loops
+  [misc
+  ,loops
   ,tqueues
   ,requests
   ,tmany
@@ -178,4 +179,13 @@ tmany = testGroup "transactMany" $
                (0,[])
                (loopPD >> broadcast beta >> lift (stateD alpha))
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5 + 100 + 200 + 300 + 400 + 500, [1,2,3,4,5])
+  ]
+
+misc = testGroup "Misc" $
+  [testCase "Split CounterC" $
+     split uniC uniC @?= Right (uniC :: CounterC Int)
+  ,testCase "Split CounterC 2" $
+     split uniC (addC 5) @?= Right (uniC :: CounterC Int)
+  ,testCase "Order CounterC" $
+     (uniC :: CounterC Int) <=? uniC @?= True
   ]

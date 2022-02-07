@@ -12,6 +12,7 @@ module Data.InfSet
   , isEmpty
   , union
   , intersection
+  , difference
   ) where
 
 import UCap.Domain.Classes
@@ -20,15 +21,6 @@ import Data.Aeson
 import Data.Set (Set)
 import qualified Data.Set as Set
 import GHC.Generics
-
--- -- | 'Linear' is a class for datatypes which have a multiplicative
--- -- conjunction operator '|*|' and an additive disjunction operator
--- -- '|+|'.  For all capabilities, '|+|' works as set-intersection on
--- -- the set of permitted effects.  For infinite capabilities, '|*|'
--- -- works like set-union.
--- class Linear a where
---   (|*|) :: a -> a -> a
---   (|+|) :: a -> a -> a
 
 -- | @'InfSet' a@ represents a set on@a@ using either an allow-list or
 -- a block-list.  This allows it to finitely represent the set of all

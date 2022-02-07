@@ -125,7 +125,7 @@ instance (Ord k, Ord s, BMeet c) => BMeet (MapC k c s) where
   meetId = MapC meetId
 
 instance (Ord k, Ord s, Split c) => Split (MapC k c s) where
-  split (MapC m1) (MapC m2) = MapC <$> split m1 m2
+  split (MapC m1) (MapC m2) = failToEither $ MapC <<$$>> splitWF m1 m2
 
 instance 
   ( Ord k
