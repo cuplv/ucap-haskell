@@ -14,6 +14,7 @@ library
                     , Lang.Rwa
                     , Lang.Rwa.Interpret
                     , UCap
+                    , UCap.Coord
                     , UCap.Domain
                     , UCap.Lens
                     , UCap.Lifter
@@ -29,6 +30,11 @@ library
                     , UCap.Replica.VClock
                     , UCap.Replica.VThread
     other-modules:    Lang.Rwa.Internal
+                    , UCap.Coord.Classes
+                    , UCap.Coord.Const
+                    , UCap.Coord.Identity
+                    , UCap.Coord.Map
+                    , UCap.Coord.Num
                     , UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
