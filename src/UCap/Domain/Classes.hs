@@ -21,6 +21,8 @@ module UCap.Domain.Classes
   , Caps (..)
   , emptyCaps
   , fullCaps
+  , isId
+  , isUni
   ) where
 
 import Data.Bifunctor
@@ -271,3 +273,11 @@ emptyCaps = Caps uniC idC
 -- be the same as 'meetId' if 'Meet' was implemented for 'Caps'.
 fullCaps :: (BMeet c, Monoid c) => Caps c
 fullCaps = Caps idC uniC
+
+{-| Check if value is 'idC' by partial-order comparison. -}
+isId :: (Monoid c, Meet c) => c -> Bool
+isId c = c <=? idC
+
+{-| Check if value is 'uniC' by partial-order comparison. -}
+isUni :: (BMeet c) => c -> Bool
+isUni c = uniC <=? c
