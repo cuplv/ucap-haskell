@@ -18,6 +18,9 @@ module UCap.Domain.Classes
   , (<<$$>>)
   , (<<*>>)
   , CState
+  , Caps (..)
+  , emptyCaps
+  , fullCaps
   ) where
 
 import Data.Bifunctor
@@ -241,3 +244,30 @@ failToEither (DidFail e) = Left e
 
 (<<$$>>) :: (Bifunctor m) => (a -> b) -> m a a -> m b b
 (<<$$>>) f = bimap f f
+
+-- | A pair of read-capability and write-capability.  'Caps' should
+-- have a 'Meet' instance, but this would require a "join" definition
+-- for @c@, distinct from the multiplicative conjunction meaning of
+-- '<>' on capabilities.
+data Caps c
+  = Caps { capsRead :: c
+         , capsWrite :: c
+         }
+
+instance (Meet c, Semigroup c) => Semigroup (Caps c) where
+  Caps r1 w1 <> Caps r2 w2 = Caps (r1 `meet` r2) (w1 <> w2)
+
+instance (BMeet c, Monoid c) => Monoid (Caps c) where
+  mempty = emptyCaps
+
+-- | An empty capability pair, allowing any concurrent update by
+-- remote operations and allowing no local update.  This is a synonym
+-- for 'mempty'.
+emptyCaps :: (BMeet c, Monoid c) => Caps c
+emptyCaps = Caps uniC idC
+
+-- | A full capability pair, allowing no concurrent updates (a
+-- fully-consistent read) and allowing any local update.  This would
+-- be the same as 'meetId' if 'Meet' was implemented for 'Caps'.
+fullCaps :: (BMeet c, Monoid c) => Caps c
+fullCaps = Caps idC uniC

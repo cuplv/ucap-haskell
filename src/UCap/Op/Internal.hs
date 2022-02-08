@@ -298,20 +298,6 @@ edLiftB ed o =
        Right a -> return a
        Left () -> error "Unhandled editor zoomState failure."
 
--- | A pair of read-capability and write-capability.
-data Caps c
-  = Caps { capsRead :: c
-         , capsWrite :: c
-         }
-
--- | An empty capability pair, allowing any concurrent update by remote operations and allowing no local update.
-emptyCaps :: (Cap c) => Caps c
-emptyCaps = Caps uniC idC
-
--- | A full capability pair, allowing no concurrent updates (a fully-consistent read) and allowing any local update.
-fullCaps :: (Cap c) => Caps c
-fullCaps = Caps idC uniC
-
 {- | Infix version of 'overLf'.
 
 @
