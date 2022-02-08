@@ -59,22 +59,22 @@ data Hist i c
          , histChanges :: [Change i c]
          , histInbox :: Map i (Int,[c])
          }
-  deriving (Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic,Show)
 
 inboxCap :: (Monoid c) => Map i (Int,[c]) -> c
 inboxCap = Map.foldr (\(_,l) c -> foldr (<>) c l) idC
 
-instance (Show i, Show c, Meet c, Monoid c) => Show (Hist i c) where
-  show (Hist i n c b) =
-    "(" ++ show i
-    ++ (case c of
-          [] -> ""
-          cs -> ", " ++ show cs)
-    ++ (if bc <=? idC
-           then ""
-           else ", " ++ show bc)
-    ++ ")"
-    where bc = inboxCap b
+-- instance (Show i, Show c, Meet c, Monoid c) => Show (Hist i c) where
+--   show (Hist i n c b) =
+--     "(" ++ show i
+--     ++ (case c of
+--           [] -> ""
+--           cs -> ", " ++ show cs)
+--     ++ (if bc <=? idC
+--            then ""
+--            else ", " ++ show bc)
+--     ++ ")"
+--     where bc = inboxCap b
 
 instance (Ord i, ToJSON i, ToJSONKey i, ToJSON c) => ToJSON (Hist i c)
 instance (Ord i, FromJSON i, FromJSONKey i, FromJSON c) => FromJSON (Hist i c)
@@ -174,10 +174,10 @@ getCap (Hist c _ ms a) = (<> ca) <$> foldM change c ms
 
 data Capconf i c
   = Capconf { capConf :: Map i (Hist i c) }
-  deriving (Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic,Show)
 
-instance (Ord i, Show i, Show c, Meet c, Monoid c) => Show (Capconf i c) where
-  show (Capconf m) = show (Map.toList m)
+-- instance (Ord i, Show i, Show c, Meet c, Monoid c) => Show (Capconf i c) where
+--   show (Capconf m) = show (Map.toList m)
 
 instance (Ord i, ToJSON i, ToJSONKey i, ToJSON c) => ToJSON (Capconf i c)
 instance (Ord i, FromJSON i, FromJSONKey i, FromJSON c) => FromJSON (Capconf i c)

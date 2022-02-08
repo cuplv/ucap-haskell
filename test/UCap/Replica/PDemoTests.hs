@@ -57,6 +57,9 @@ intModder2 l1 l2 = do
 abUI :: (Cap c) => Capconf String c
 abUI = capsFromList [(alpha,uniC),(beta,idC)] 
 
+abIU :: (Cap c) => Capconf String c
+abIU = capsFromList [(alpha,idC),(beta,uniC)] 
+
 abUU :: (Cap c) => Capconf String c
 abUU = capsFromList [(alpha,uniC),(beta,uniC)] 
 
@@ -174,18 +177,50 @@ tmany = testGroup "transactMany" $
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Two with locks" $
      evalPDemo (Map.fromList [(alpha,s1),(beta,s2)])
-               abUI
+               (abUI :: (Capconf String (CounterC Int, ConstC (IdentityC [Int]) [Int])))
                (withLock alpha)
                (0,[])
                (loopPD >> broadcast beta >> lift (stateD alpha))
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5 + 100 + 200 + 300 + 400 + 500, [1,2,3,4,5])
   ]
 
+type TestC = (CounterC Int, ConstC (IdentityC [Int]) [Int])
+
 misc = testGroup "Misc" $
   [testCase "Split CounterC" $
      split uniC uniC @?= Right (uniC :: CounterC Int)
   ,testCase "Split CounterC 2" $
      split uniC (addC 5) @?= Right (uniC :: CounterC Int)
+  ,testCase "Split Pair" $
+     split uniC (addC 5, idC)
+     @?= Right (uniC :: TestC)
+  ,testCase "Split ID" $
+     split (uniC :: IdentityC [Int]) uniC @?= Right uniC
+  ,testCase "Split CID" $
+     split (uniC :: ConstC (IdentityC [Int]) [Int]) uniC @?= Right uniC
   ,testCase "Order CounterC" $
      (uniC :: CounterC Int) <=? uniC @?= True
+  ,testCase "dropG" $
+     capsFlatten <$> (dropG alpha uniC (abUI :: Capconf String TestC))
+     @?= capsFlatten <$> (Just abUI)
+  ,testCase "dropG 2" $
+     capsFlatten <$> dropG alpha (mincap (idE, ConstE [1])) (abUI :: Capconf String TestC)
+     @?= capsFlatten <$> Just abUI
+  ,testCase "transferG" $
+     capsFlatten <$> transferG alpha (beta,uniC :: TestC) abUI
+     @?= capsFlatten <$> (Just abUU)
+  ,testCase "transferG 2" $
+     capsFlatten <$> (mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI)
+     @?= capsFlatten <$> (Just abIU)
+  ,testCase "transferG 3" $
+     do let cc1 = mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI
+        -- print cc1
+        let cc2 = mdropG beta idC <$> (transferG beta (alpha, uniC) =<< acceptG beta <$> cc1)
+        capsFlatten <$> cc2 @?= capsFlatten <$> Just abUI
+  ,testCase "transferG 3.1" $
+     capsFlatten <$> ((\cc -> mdropG beta idC <$> transferG beta (alpha, uniC) cc) =<< acceptG beta <$> (mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI))
+     @?= capsFlatten <$> (Just abUI)
+  ,testCase "transferG 4" $
+     capsFlatten <$> transferG beta (alpha, uniC :: TestC) abIU
+     @?= capsFlatten <$> (Just abUU)
   ]
