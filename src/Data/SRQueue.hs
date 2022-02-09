@@ -11,6 +11,7 @@ module Data.SRQueue
   , seInit
   , seSet
   , seGet
+  , seMod
   ) where
 
 {-| An 'SRQueue' is a queue of elements that can be safely added-to in a
@@ -57,7 +58,6 @@ srInit as = SRQueue 0 as
 {-| Add an element to the queue.  This is safe to perform concurrently with other 'srEnqueue' changes. -}
 srEnqueue :: a -> SRQueue a -> SRQueue a
 srEnqueue a = srEnqueueAll [a]
--- srEnqueue a (SRQueue g as) = SRQueue g (as ++ [a])
 
 srEnqueueAll :: [a] -> SRQueue a -> SRQueue a
 srEnqueueAll as1 (SRQueue g as2) = SRQueue g (as1 ++ as2)
@@ -98,3 +98,6 @@ seSet a (SECell g _) = SECell (g + 1) a
 
 seGet :: SECell a -> a
 seGet (SECell _ a) = a
+
+seMod :: (a -> a) -> SECell a -> SECell a
+seMod f c = seSet (f $ seGet c) c

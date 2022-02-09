@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -93,6 +94,8 @@ data EscrowIntAccount i
                      }
   deriving (Show,Eq,Ord)
 
+makeLenses ''EscrowIntAccount
+
 initAccount :: Int -> EscrowIntAccount i
 initAccount n = EscrowIntAccount (seInit n) srEmpty srEmpty
 
@@ -100,13 +103,83 @@ instance (Ord i) => Semigroup (EscrowIntAccount i) where
   EscrowIntAccount o1 i1 r1 <> EscrowIntAccount o2 i2 r2 =
     EscrowIntAccount (o1 <> o2) (i1 <> i2) (r1 <> r2)
 
+instance (Ord i) => Monoid (EscrowIntAccount i) where
+  mempty = initAccount 0
+
 data EscrowIntPool i
-  = EscrowPool { _epAccounts :: Map i (EscrowIntAccount i)
-               , _epSinks :: [i]
-               , _epSource :: [i]
-               }
+  = EscrowIntPool { _epAccounts :: Map i (EscrowIntAccount i)
+                  , _epSinks :: [i]
+                  , _epSources :: [i]
+                  }
   deriving (Show,Eq,Ord)
 
+makeLenses ''EscrowIntPool
+
+acct :: (Ord i) => i -> Lens' (EscrowIntPool i) (EscrowIntAccount i)
+acct i = epAccounts . at i . non mempty
+
 instance (Ord i) => Semigroup (EscrowIntPool i) where
-  EscrowPool a1 sk1 sr1 <> EscrowPool a2 _ _
-    = EscrowPool (Map.unionWith (<>) a1 a2) sk1 sr1
+  EscrowIntPool a1 sk1 sr1 <> EscrowIntPool a2 _ _ =
+    EscrowIntPool (Map.unionWith (<>) a1 a2) sk1 sr1
+
+initEscrow :: [i] -> [i] -> Map i Int -> EscrowIntPool i
+initEscrow sinks sources amounts =
+  EscrowIntPool { _epSinks = sinks
+                , _epSources = sources
+                , _epAccounts = Map.map initAccount amounts
+                }
+
+escrowOwned :: (Ord i) => i -> EscrowIntPool i -> Int
+escrowOwned i p = seGet $ p ^. epAccounts . at i . non mempty . epaOwned
+
+escrowUnowned :: (Ord i) => i -> EscrowIntPool i -> Int
+escrowUnowned i p = escrowTotal p - escrowOwned i p
+
+escrowTotal :: (Ord i) => EscrowIntPool i -> Int
+escrowTotal p = sum $ map (\i -> escrowOwned i p) (Map.keys (p^.epAccounts))
+
+escrowUse
+  :: (Ord i)
+  => i
+  -> Int
+  -> EscrowIntPool i
+  -> Maybe (EscrowIntPool i)
+escrowUse i amt p | escrowOwned i p < amt = Nothing
+                  | otherwise = Just $
+  p & acct i . epaOwned %~ seMod (\a -> a - amt)
+
+escrowRequest
+  :: (Ord i)
+  => i
+  -> (i,Int)
+  -> EscrowIntPool i
+  -> EscrowIntPool i
+escrowRequest i (i2,amt) =
+  acct i2 . epaRequests
+  %~ srEnqueue (EscrowIntRequest { _eprAsker = i
+                                 , _eprAmount = amt })
+
+escrowTransfer
+  :: (Ord i)
+  => i
+  -> (i,Int)
+  -> EscrowIntPool i
+  -> Maybe (EscrowIntPool i)
+escrowTransfer i (i2,amt) p = do
+  p' <- escrowUse i amt p
+  return $ p' & acct i2 . epaInbox %~ srEnqueue amt
+
+escrowHandleReqs :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
+escrowHandleReqs i p =
+  case srDequeue (p ^. acct i . epaRequests) of
+    Just (rs',EscrowIntRequest i2 amt) ->
+      case escrowTransfer i (i2,amt) p of
+        Just p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
+        Nothing -> p
+    Nothing -> p
+
+escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
+escrowAccept i p =
+  let (inbox',amts) = srDequeueAll $ p ^. acct i . epaInbox
+  in p & acct i . epaInbox .~ inbox'
+       & acct i . epaOwned %~ seMod (+ sum amts)
