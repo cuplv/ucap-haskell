@@ -2,8 +2,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module UCap.Coord.Identity
-  (IdentityG (..)
+module UCap.Coord.Static
+  ( IdentityG (..)
+  , UniversalG (..)
   ) where
 
 import UCap.Coord.Classes
@@ -39,6 +40,24 @@ instance (Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
     if e == idE
        then Right IdentityG
        else Left (mincap e)
-  localCaps _ IdentityG = Caps { capsRead = uniC
+  localCaps _ IdentityG = Caps { capsRead = idC
                                , capsWrite = idC
                                }
+
+data UniversalG i c = UniversalG deriving (Show,Eq,Ord)
+
+instance Semigroup (UniversalG i c) where
+  g1 <> _ = g1
+  
+instance Monoid (UniversalG i c) where
+  mempty = UniversalG
+
+instance (Cap c, Eq (CEffect c)) => CoordSys (UniversalG i c) where
+  type GId (UniversalG i c) = i
+  type GCap (UniversalG i c) = c
+  resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right ()
+                                       | otherwise = Left Nothing
+  resolveEffect _ e UniversalG = Right UniversalG
+  localCaps _ UniversalG = Caps { capsRead = uniC
+                                , capsWrite = uniC
+                                }

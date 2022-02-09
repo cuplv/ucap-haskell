@@ -33,9 +33,9 @@ library
     other-modules:    Lang.Rwa.Internal
                     , UCap.Coord.Classes
                     , UCap.Coord.Const
-                    , UCap.Coord.Identity
                     , UCap.Coord.Map
                     , UCap.Coord.Num
+                    , UCap.Coord.Static
                     , UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
