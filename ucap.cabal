@@ -11,6 +11,7 @@ library
     exposed-modules:  Data.InfNum
                     , Data.InfMap
                     , Data.InfSet
+                    , Data.SRQueue
                     , Lang.Rwa
                     , Lang.Rwa.Interpret
                     , UCap
