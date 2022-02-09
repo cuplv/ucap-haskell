@@ -23,6 +23,7 @@ module UCap.Domain.Classes
   , fullCaps
   , isId
   , isUni
+  , leqCaps
   ) where
 
 import Data.Bifunctor
@@ -281,3 +282,6 @@ isId c = c <=? idC
 {-| Check if value is 'uniC' by partial-order comparison. -}
 isUni :: (BMeet c) => c -> Bool
 isUni c = uniC <=? c
+
+leqCaps :: (Meet c) => Caps c -> Caps c -> Bool
+leqCaps (Caps r1 w1) (Caps r2 w2) = r2 <=? r1 && w1 <=? w2
