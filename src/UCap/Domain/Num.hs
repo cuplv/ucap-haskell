@@ -10,13 +10,17 @@ module UCap.Domain.Num
   , isSubE
   , CounterC
   , addC
+  , addC'
   , addAny
+  , addAny'
   , subC
+  , subC'
   , subAny
+  , subAny'
   , mulC
   , mulAny
-  , Bounds
-  , MulAdd
+  , Bounds (..)
+  , MulAdd (..)
   , divup
   ) where
 

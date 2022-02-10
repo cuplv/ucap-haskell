@@ -29,12 +29,14 @@ class (Cap (GCap g)) => CoordSys g where
   type GId g
 
   {-| For given capability requirements, check if they are satisifed by
-    the coordination system.  If so, return @'Right' ()@.  If not,
-    attempt to perform requests that will eventually satisfy those
-    requirements.  If this is possible, return the request-containing
-    system in @'Left' ('Just' y)@.  If not, and thus there is no way
-    to satisfy the requirements, return @'Left' 'Nothing'@. -}
-  resolveCaps :: GId g -> Caps (GCap g) -> g -> Either (Maybe g) ()
+    the coordination system.  If so, return @'Right' f@, where @f@ is
+    a simulation function that modifies the observed state value.  If
+    not, attempt to perform requests that will eventually satisfy
+    those requirements.  If this is possible, return the
+    request-containing system in @'Left' ('Just' y)@.  If not, and
+    thus there is no way to satisfy the requirements, return @'Left'
+    'Nothing'@. -}
+  resolveCaps :: GId g -> Caps (GCap g) -> g -> Either (Maybe g) (GState g -> GState g)
   {-| For given effect, modify the coordination system to reflect its use.
     If the coordination system locally permits issuing the effect,
     then modify it accordingly and return @'Right' y@.  If not, return
@@ -80,6 +82,13 @@ grantToken i (Token o q) = case srDequeue q of
   Just (q2,i2) | i == seGet o -> Right $ Token (seSet i2 o) q2
                | otherwise -> Left NotOwner
   Nothing -> Left NotRequested
+
+{-| Grant a token if appropriate (@i@ is owner and token has been
+  requested), or make no change otherwise. -}
+handleTokenReqs :: (Eq i) => i -> Token i -> Token i
+handleTokenReqs i t = case grantToken i t of
+                        Right t' -> t'
+                        Left _ -> t
 
 data EscrowIntRequest i
   = EscrowIntRequest { _eprAsker :: i
@@ -143,10 +152,18 @@ escrowUse
   => i
   -> Int
   -> EscrowIntPool i
-  -> Maybe (EscrowIntPool i)
-escrowUse i amt p | escrowOwned i p < amt = Nothing
-                  | otherwise = Just $
+  -> Either Int (EscrowIntPool i)
+escrowUse i amt p | escrowOwned i p < amt = Left $ amt - escrowOwned i p
+                  | otherwise = Right $
   p & acct i . epaOwned %~ seMod (\a -> a - amt)
+
+escrowAdd
+  :: (Ord i)
+  => i
+  -> Int
+  -> EscrowIntPool i
+  -> EscrowIntPool i
+escrowAdd i amt = acct i . epaOwned %~ seMod (+ amt)
 
 escrowRequest
   :: (Ord i)
@@ -164,7 +181,7 @@ escrowTransfer
   => i
   -> (i,Int)
   -> EscrowIntPool i
-  -> Maybe (EscrowIntPool i)
+  -> Either Int (EscrowIntPool i)
 escrowTransfer i (i2,amt) p = do
   p' <- escrowUse i amt p
   return $ p' & acct i2 . epaInbox %~ srEnqueue amt
@@ -174,8 +191,8 @@ escrowHandleReqs i p =
   case srDequeue (p ^. acct i . epaRequests) of
     Just (rs',EscrowIntRequest i2 amt) ->
       case escrowTransfer i (i2,amt) p of
-        Just p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
-        Nothing -> p
+        Right p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
+        Left _ -> p
     Nothing -> p
 
 escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i

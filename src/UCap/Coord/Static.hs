@@ -18,7 +18,7 @@ import UCap.Domain.Identity
 @
 'resolveEffect' i ('addE' 5) 'IdentityG' = 'Left' ('addC' 5)
 
-'resolveEffect' i 'idE' 'IdentityG' = 'Right' ()
+'resolveEffect' i 'idE' 'IdentityG' = 'Right' 'id'
 @
 -}
 data IdentityG i c = IdentityG deriving (Show,Eq,Ord)
@@ -34,7 +34,7 @@ instance (Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
   type GCap (IdentityG i c) = c
   resolveCaps _ (Caps _ wc) IdentityG =
     if isId wc
-       then Right ()
+       then Right id
        else Left Nothing
   resolveEffect _ e IdentityG =
     if e == idE
@@ -55,7 +55,7 @@ instance Monoid (UniversalG i c) where
 instance (Cap c, Eq (CEffect c)) => CoordSys (UniversalG i c) where
   type GId (UniversalG i c) = i
   type GCap (UniversalG i c) = c
-  resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right ()
+  resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right id
                                        | otherwise = Left Nothing
   resolveEffect _ e UniversalG = Right UniversalG
   localCaps _ UniversalG = Caps { capsRead = uniC
