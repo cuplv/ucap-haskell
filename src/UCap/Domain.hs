@@ -5,7 +5,6 @@ module UCap.Domain
   , module UCap.Domain.Identity
   , module UCap.Domain.Map
   , module UCap.Domain.Num
-  , module UCap.Domain.Int
   ) where
 
 import UCap.Domain.Classes
@@ -14,4 +13,3 @@ import UCap.Domain.Either
 import UCap.Domain.Identity
 import UCap.Domain.Map
 import UCap.Domain.Num
-import UCap.Domain.Int

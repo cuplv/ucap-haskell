@@ -17,6 +17,7 @@ library
                     , UCap
                     , UCap.Coord
                     , UCap.Domain
+                    , UCap.Domain.Int
                     , UCap.Lens
                     , UCap.Lifter
                     , UCap.Op
@@ -42,7 +43,6 @@ library
                     , UCap.Domain.Identity
                     , UCap.Domain.Map
                     , UCap.Domain.Num
-                    , UCap.Domain.Int
                     , UCap.Op.Internal
                     , UCap.Op.Num
                     , UCap.Op.Either

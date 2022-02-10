@@ -47,6 +47,8 @@ class (Cap (GCap g)) => CoordSys g where
   {-| The locally-held read and write capabilities. -}
   localCaps :: GId g -> g -> Caps (GCap g)
 
+  gainWrite :: GId g -> GCap g -> g -> g
+
 data Token i
   = Token { _tkOwner :: SECell i
           , _tkQueue :: SRQueue i

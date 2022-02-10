@@ -8,6 +8,9 @@ import UCap.Domain.Classes
 class IntOffset a where
   intOffset :: a -> Int
 
+class (Cap c) => MaxEffect c where
+  maxEffect :: c -> Maybe (CEffect c)
+
 newtype IncE = IncE Int deriving (Show,Eq,Ord)
 
 instance Semigroup IncE where
@@ -85,7 +88,12 @@ addIntE :: Int -> IntE
 addIntE = AddE . incE
 
 subIntE :: Int -> IntE
-subIntE = SubE . decE
+subIntE 0 = mempty -- AddE 0 instead of SubE 0
+subIntE n = SubE $ decE n
+
+invertIntE :: IntE -> IntE
+invertIntE (AddE e) = SubE (DecE e)
+invertIntE (SubE (DecE e)) = AddE e
 
 newtype IncC = IncC (AddBound Int) deriving (Show,Eq,Ord)
 
@@ -112,8 +120,11 @@ instance Split IncC where
   split (IncC a) (IncC b) = IncC <<$$>> split a b
 
 instance Cap IncC where
-  type CEffect IncC = IntE
+  type CEffect IncC = IncE
   mincap = incC . intOffset
+
+instance MaxEffect IncC where
+  maxEffect (IncC a) = incE <$> addFun a
 
 newtype DecC = DecC IncC deriving (Show,Eq,Ord)
 
@@ -143,8 +154,51 @@ instance Cap DecC where
   type CEffect DecC = DecE
   mincap = decC . intOffset
 
+instance MaxEffect DecC where
+  maxEffect (DecC c) = DecE <$> maxEffect c
+
 data IntC
   = IntC { addBnd :: IncC
          , subBnd :: DecC
          }
   deriving (Show,Eq,Ord)
+
+intC :: Int -> IntC
+intC n | n >= 0 = addIntC n
+       | n < 0 = subIntC (-n)
+-- intC n | n >= 0 = IntC (incC n) mempty
+--        | n < 0 = IntC mempty (decC (-n))
+
+addIntC :: Int -> IntC
+addIntC n = IntC (incC n) mempty
+
+subIntC :: Int -> IntC
+subIntC 0 = mempty
+subIntC n = IntC mempty (decC n)
+
+instance Semigroup IntC where
+  IntC a1 s1 <> IntC a2 s2 = IntC (a1 <> a2) (s1 <> s2)
+
+instance Monoid IntC where
+  mempty = IntC mempty mempty
+
+instance Meet IntC where
+  IntC a1 s1 <=? IntC a2 s2 = a1 <=? a2 && s1 <=? s2
+  IntC a1 s1 `meet` IntC a2 s2 = IntC (meet a1 a2) (meet s1 s2)
+
+instance BMeet IntC where
+  meetId = IntC meetId meetId
+
+instance Split IntC where
+  split (IntC a1 s1) (IntC a2 s2) = failToEither $
+    IntC <<$$>> splitWF a1 a2 <<*>> splitWF s1 s2
+
+instance Cap IntC where
+  type CEffect IntC = IntE
+  mincap (AddE e) = IntC (mincap e) idC
+  mincap (SubE e) = IntC idC (mincap e)
+  undo = mincap . invertIntE
+  weaken (IntC a1 s1) (IntC a2 s2)
+    | isUni a1 = undefined -- modify by s2 if s2 is finite
+    | isUni s1 = undefined -- modify by a2 if a2 is finite
+    | otherwise = Nothing
