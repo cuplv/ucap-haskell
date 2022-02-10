@@ -42,6 +42,7 @@ library
                     , UCap.Domain.Identity
                     , UCap.Domain.Map
                     , UCap.Domain.Num
+                    , UCap.Domain.Int
                     , UCap.Op.Internal
                     , UCap.Op.Num
                     , UCap.Op.Either
