@@ -55,7 +55,12 @@ instance (Ord i, IntCoord g1, IntCoord g2)
   => CoordSys (CounterG i g1 g2) where
   type GCap (CounterG i g1 g2) = Bounds Int
   type GId (CounterG i g1 g2) = i
-  resolveCaps i (Bounds ab sb mb) = undefined
+  resolveCaps i cs g | mulBound (capsWrite cs) == mempty =
+    let addWR = addBound $ capsWrite cs
+        addRR = addBound $ capsRead cs
+        subWR = subBound $ capsWrite cs
+        subRR = subBound $ capsRead cs
+    in undefined
   resolveEffect i (MulAdd m n) g
     | m == mulId && n == 0 = Right g
     | m == mulId && n > 0 = bimap

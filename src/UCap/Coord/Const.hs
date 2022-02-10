@@ -36,7 +36,7 @@ instance (Ord (GId g), Ord (GState g), CoordSys g) => CoordSys (ConstG g) where
   resolveCaps i cs (ConstG g) = case (capsRead cs, capsWrite cs) of
     (ConstC rs rc, ConstC ws wc) | ws == mempty ->
       let cs = Caps { capsRead = rc, capsWrite = wc }
-      in fmap ConstG `first` resolveCaps i cs g
+      in bimap (fmap ConstG) ModifyE $ resolveCaps i cs g
                                  | otherwise -> Left Nothing
 
 instance (Ord (GId g), Ord (GState g), CoordSys g) => CoordSys (ConstTG g) where
@@ -49,6 +49,6 @@ instance (Ord (GId g), Ord (GState g), CoordSys g) => CoordSys (ConstTG g) where
     | i == tokenOwner t = Right g
     | otherwise = Left . mincap $ e
   resolveCaps i cs (ConstTG t)
-    | i == tokenOwner t = Right id
-    | cs `leqCaps` emptyCaps = Right id
+    | i == tokenOwner t = Right idE
+    | cs `leqCaps` emptyCaps = Right idE
     | otherwise = Left . Just . ConstTG $ requestToken i t

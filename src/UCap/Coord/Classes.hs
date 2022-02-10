@@ -36,7 +36,7 @@ class (Cap (GCap g)) => CoordSys g where
     request-containing system in @'Left' ('Just' y)@.  If not, and
     thus there is no way to satisfy the requirements, return @'Left'
     'Nothing'@. -}
-  resolveCaps :: GId g -> Caps (GCap g) -> g -> Either (Maybe g) (GState g -> GState g)
+  resolveCaps :: GId g -> Caps (GCap g) -> g -> Either (Maybe g) (GEffect g)
   {-| For given effect, modify the coordination system to reflect its use.
     If the coordination system locally permits issuing the effect,
     then modify it accordingly and return @'Right' y@.  If not, return

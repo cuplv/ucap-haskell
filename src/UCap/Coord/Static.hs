@@ -34,7 +34,7 @@ instance (Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
   type GCap (IdentityG i c) = c
   resolveCaps _ (Caps _ wc) IdentityG =
     if isId wc
-       then Right id
+       then Right idE
        else Left Nothing
   resolveEffect _ e IdentityG =
     if e == idE
@@ -55,7 +55,7 @@ instance Monoid (UniversalG i c) where
 instance (Cap c, Eq (CEffect c)) => CoordSys (UniversalG i c) where
   type GId (UniversalG i c) = i
   type GCap (UniversalG i c) = c
-  resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right id
+  resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right idE
                                        | otherwise = Left Nothing
   resolveEffect _ e UniversalG = Right UniversalG
   localCaps _ UniversalG = Caps { capsRead = uniC
