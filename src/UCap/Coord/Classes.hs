@@ -47,8 +47,8 @@ class (Cap (GCap g)) => CoordSys g where
   {-| The locally-held read and write capabilities. -}
   localCaps :: GId g -> g -> Caps (GCap g)
 
-  gainWrite :: GId g -> GCap g -> g -> g
-  gainWrite _ _ = id
+  undoEffect :: GId g -> GEffect g -> g -> g
+  undoEffect _ _ = id
 
 data Token i
   = Token { _tkOwner :: SECell i
@@ -198,6 +198,17 @@ escrowRequest i (i2,amt) =
   acct i2 . epaRequests
   %~ srEnqueue (EscrowIntRequest { _eprAsker = i
                                  , _eprAmount = amt })
+
+escrowRequest'
+  :: (Ord i)
+  => i
+  -> Int
+  -> EscrowIntPool i
+  -> Maybe (EscrowIntPool i)
+escrowRequest' i amt p =
+  case p ^. epSources of
+    i2 : _ -> Just $ escrowRequest i (i2,amt) p
+    [] -> Nothing
 
 escrowTransfer
   :: (Ord i)

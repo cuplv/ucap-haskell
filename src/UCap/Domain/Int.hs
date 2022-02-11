@@ -103,6 +103,9 @@ incC = IncC . addB
 incInfC :: IncC
 incInfC = IncC meetId
 
+incBound :: IncC -> Maybe Int
+incBound (IncC b) = addFun b
+
 instance Semigroup IncC where
   IncC a <> IncC b = IncC $ a <> b
 

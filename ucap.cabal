@@ -16,6 +16,7 @@ library
                     , Lang.Rwa.Interpret
                     , UCap
                     , UCap.Coord
+                    , UCap.Coord.Int
                     , UCap.Domain
                     , UCap.Domain.Int
                     , UCap.Lens
