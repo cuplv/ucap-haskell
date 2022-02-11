@@ -6,6 +6,7 @@ import UCap.Coord.Classes
 import UCap.Domain.Classes
 import UCap.Domain.Int
 
+import Control.Applicative (liftA2)
 import Data.Bifunctor
 
 data IncEscrow i
@@ -66,13 +67,10 @@ instance (Ord i) => CoordSys (IntEscrow i) where
   type GCap (IntEscrow i) = IntC
   type GId (IntEscrow i) = i
   resolveCaps i cs (IntEscrow a s) =
-    let ar = resolveCaps i (addBnd <$> cs) a
-        sr = resolveCaps i (subBnd <$> cs) s
-    in case (ar,sr) of
-         (Right ae, Right se) -> Right (AddE ae <> SubE se)
-         (Right _, Left ms) -> Left $ (\s' -> IntEscrow a s') <$> ms
-         (Left ma, Right _) -> Left $ (\a' -> IntEscrow a' s) <$> ma
-         (Left ma, Left ms) -> Left (IntEscrow <$> ma <*> ms)
+    let ar = eitherToWF (pure a) $ AddE <$> resolveCaps i (addBnd <$> cs) a
+        sr = eitherToWF (pure s) $ SubE <$> resolveCaps i (subBnd <$> cs) s
+        f = WhenFail (liftA2 IntEscrow) (<>)
+    in failToEither $ f <<*>> ar <<*>> sr
   resolveEffect i e (IntEscrow a s) = case e of
     AddE e -> bimap
       fromIncC
@@ -82,9 +80,7 @@ instance (Ord i) => CoordSys (IntEscrow i) where
       fromDecC
       (\s -> IntEscrow (undoEffect i e a) s)
       (resolveEffect i (DecE e) s)
-  localCaps i (IntEscrow a s) = IntC
-    <$> localCaps i a
-    <*> localCaps i s
+  localCaps i (IntEscrow a s) = IntC <$> localCaps i a <*> localCaps i s
   undoEffect i e (IntEscrow a s) = case e of
     AddE e -> IntEscrow (undoEffect i e a) s
     SubE e -> IntEscrow a (undoEffect i e s)

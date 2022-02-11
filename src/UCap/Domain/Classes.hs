@@ -13,6 +13,7 @@ module UCap.Domain.Classes
   , Split (..)
   , splitWF
   , WhenFail (..)
+  , eitherToWF
   , failMempty
   , failToEither
   , (<<$$>>)
@@ -237,6 +238,10 @@ instance Biapplicative WhenFail where
   WhenFail fe fa <<*>> DidFail e = DidFail (fe e)
   DidFail fe <<*>> WhenFail e a = DidFail (fe e)
   DidFail fe <<*>> DidFail e = DidFail (fe e)
+
+eitherToWF :: e -> Either e a -> WhenFail e a
+eitherToWF e (Right a) = WhenFail e a
+eitherToWF _ (Left e) = DidFail e
 
 failMempty :: (Monoid a) => a -> WhenFail a a
 failMempty a = WhenFail mempty a
