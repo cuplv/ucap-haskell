@@ -50,6 +50,81 @@ class (Cap (GCap g)) => CoordSys g where
   undoEffect :: GId g -> GEffect g -> g -> g
   undoEffect _ _ = id
 
+  grantRequests :: GId g -> g -> g
+  grantRequests _ = id
+
+la2 f a b = f <$> a <*> b
+
+la3 f a b c = f <$> a <*> b <*> c
+
+la4 f a b c d = f <$> a <*> b <*> c <*> d
+
+instance (GId a ~ GId b, CoordSys a, CoordSys b) => CoordSys (a,b) where
+  type GCap (a,b) = (GCap a, GCap b)
+  type GId (a,b) = GId a
+  resolveCaps i cs (a,b) = failToEither $ WhenFail (la2 (,)) (,)
+    <<*>> (eitherToWF (pure a) $ resolveCaps i (fst <$> cs) a)
+    <<*>> (eitherToWF (pure b) $ resolveCaps i (snd <$> cs) b)
+  resolveEffect i (ea,eb) (a,b) = failToEither $ WhenFail (,) (,)
+    <<*>> (eitherToWF idC $ resolveEffect i ea a)
+    <<*>> (eitherToWF idC $ resolveEffect i eb b)
+  localCaps i (a,b) = (,) <$> localCaps i a <*> localCaps i b
+  undoEffect i (ea,eb) (a,b) = (undoEffect i ea a, undoEffect i eb b)
+  grantRequests i (a,b) = (grantRequests i a, grantRequests i b)
+
+instance (GId a ~ GId b, GId a ~ GId c, CoordSys a, CoordSys b, CoordSys c) => CoordSys (a,b,c) where
+  type GCap (a,b,c) = (GCap a, GCap b, GCap c)
+  type GId (a,b,c) = GId a
+  resolveCaps i cs (a,b,c) = failToEither $ WhenFail (la3 (,,)) (,,)
+    <<*>> (eitherToWF (pure a) $ resolveCaps i (view _1 <$> cs) a)
+    <<*>> (eitherToWF (pure b) $ resolveCaps i (view _2 <$> cs) b)
+    <<*>> (eitherToWF (pure c) $ resolveCaps i (view _3 <$> cs) c)
+  resolveEffect i (ea,eb,ec) (a,b,c) = failToEither $ WhenFail (,,) (,,)
+    <<*>> (eitherToWF idC $ resolveEffect i ea a)
+    <<*>> (eitherToWF idC $ resolveEffect i eb b)
+    <<*>> (eitherToWF idC $ resolveEffect i ec c)
+  localCaps i (a,b,c) = (,,)
+    <$> localCaps i a
+    <*> localCaps i b
+    <*> localCaps i c
+  undoEffect i (ea,eb,ec) (a,b,c) = (,,)
+    (undoEffect i ea a)
+    (undoEffect i eb b)
+    (undoEffect i ec c)
+  grantRequests i (a,b,c) = (,,)
+    (grantRequests i a)
+    (grantRequests i b)
+    (grantRequests i c)
+
+instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, CoordSys c, CoordSys d) => CoordSys (a,b,c,d) where
+  type GCap (a,b,c,d) = (GCap a, GCap b, GCap c, GCap d)
+  type GId (a,b,c,d) = GId a
+  resolveCaps i cs (a,b,c,d) = failToEither $ WhenFail (la4 (,,,)) (,,,)
+    <<*>> (eitherToWF (pure a) $ resolveCaps i (view _1 <$> cs) a)
+    <<*>> (eitherToWF (pure b) $ resolveCaps i (view _2 <$> cs) b)
+    <<*>> (eitherToWF (pure c) $ resolveCaps i (view _3 <$> cs) c)
+    <<*>> (eitherToWF (pure d) $ resolveCaps i (view _4 <$> cs) d)
+  resolveEffect i (ea,eb,ec,ed) (a,b,c,d) = failToEither $ WhenFail (,,,) (,,,)
+    <<*>> (eitherToWF idC $ resolveEffect i ea a)
+    <<*>> (eitherToWF idC $ resolveEffect i eb b)
+    <<*>> (eitherToWF idC $ resolveEffect i ec c)
+    <<*>> (eitherToWF idC $ resolveEffect i ed d)
+  localCaps i (a,b,c,d) = (,,,)
+    <$> localCaps i a
+    <*> localCaps i b
+    <*> localCaps i c
+    <*> localCaps i d
+  undoEffect i (ea,eb,ec,ed) (a,b,c,d) = (,,,)
+    (undoEffect i ea a)
+    (undoEffect i eb b)
+    (undoEffect i ec c)
+    (undoEffect i ed d)
+  grantRequests i (a,b,c,d) = (,,,)
+    (grantRequests i a)
+    (grantRequests i b)
+    (grantRequests i c)
+    (grantRequests i d)
+
 data Token i
   = Token { _tkOwner :: SECell i
           , _tkQueue :: SRQueue i
@@ -105,6 +180,7 @@ instance (Ord i, Cap c) => CoordSys (TokenG i c) where
   localCaps i (TokenG t)
     | i == tokenOwner t = fullCaps
     | otherwise = emptyCaps
+  grantRequests i (TokenG t) = TokenG $ handleTokenReqs i t
 
 {-| Grant a token if appropriate (@i@ is owner and token has been
   requested), or make no change otherwise. -}
