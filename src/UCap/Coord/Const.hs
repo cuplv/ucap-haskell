@@ -17,6 +17,9 @@ deriving instance (Show g, Show (GId g)) => Show (ConstG g)
 deriving instance (Eq g, Eq (GId g)) => Eq (ConstG g)
 deriving instance (Ord g, Ord (GId g)) => Ord (ConstG g)
 
+instance (Semigroup g) => Semigroup (ConstG g) where
+  ConstG a <> ConstG b = ConstG (a <> b)
+
 fullConstG :: (Ord (CState c), Cap c) => Caps (ConstC' c)
 fullConstG = Caps { capsRead = idC
                   , capsWrite = modifyC uniC
