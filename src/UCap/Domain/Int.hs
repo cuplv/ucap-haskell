@@ -166,15 +166,20 @@ data IntC
 intC :: Int -> IntC
 intC n | n >= 0 = addIntC n
        | n < 0 = subIntC (-n)
--- intC n | n >= 0 = IntC (incC n) mempty
---        | n < 0 = IntC mempty (decC (-n))
 
 addIntC :: Int -> IntC
 addIntC n = IntC (incC n) mempty
 
+fromIncC :: IncC -> IntC
+fromIncC a = IntC a mempty
+
 subIntC :: Int -> IntC
 subIntC 0 = mempty
 subIntC n = IntC mempty (decC n)
+
+fromDecC :: DecC -> IntC
+fromDecC a | a == mempty = mempty
+           | otherwise = IntC mempty a
 
 instance Semigroup IntC where
   IntC a1 s1 <> IntC a2 s2 = IntC (a1 <> a2) (s1 <> s2)
@@ -199,6 +204,7 @@ instance Cap IntC where
   mincap (SubE e) = IntC idC (mincap e)
   undo = mincap . invertIntE
   weaken (IntC a1 s1) (IntC a2 s2)
-    | isUni a1 = undefined -- modify by s2 if s2 is finite
-    | isUni s1 = undefined -- modify by a2 if a2 is finite
+    | isUni a1 && isUni s1 = Just idE
+    | isUni a1 = SubE <$> maxEffect s2
+    | isUni s1 = AddE <$> maxEffect a2
     | otherwise = Nothing
