@@ -266,6 +266,10 @@ instance (BMeet c, Monoid c) => Monoid (Caps c) where
 instance Functor Caps where
   fmap f (Caps rc wc) = Caps (f rc) (f wc)
 
+instance Applicative Caps where
+  pure a = Caps a a
+  Caps rf wf <*> Caps ra wa = Caps (rf ra) (wf wa)
+
 -- | An empty capability pair, allowing any concurrent update by
 -- remote operations and allowing no local update.  This is a synonym
 -- for 'mempty'.

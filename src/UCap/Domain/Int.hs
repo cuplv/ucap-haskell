@@ -129,7 +129,7 @@ instance Cap IncC where
 instance MaxEffect IncC where
   maxEffect (IncC a) = incE <$> addFun a
 
-newtype DecC = DecC IncC deriving (Show,Eq,Ord)
+newtype DecC = DecC { unwrapDecC :: IncC } deriving (Show,Eq,Ord)
 
 decC :: Int -> DecC
 decC = DecC . incC
