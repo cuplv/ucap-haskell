@@ -48,6 +48,7 @@ class (Cap (GCap g)) => CoordSys g where
   localCaps :: GId g -> g -> Caps (GCap g)
 
   gainWrite :: GId g -> GCap g -> g -> g
+  gainWrite _ _ = id
 
 data Token i
   = Token { _tkOwner :: SECell i
@@ -84,6 +85,26 @@ grantToken i (Token o q) = case srDequeue q of
   Just (q2,i2) | i == seGet o -> Right $ Token (seSet i2 o) q2
                | otherwise -> Left NotOwner
   Nothing -> Left NotRequested
+
+data TokenG i c
+  = TokenG (Token i)
+  deriving (Show,Eq,Ord)
+
+instance (Ord i) => Semigroup (TokenG i c) where
+  TokenG t1 <> TokenG t2 = TokenG (t1 <> t2)
+
+instance (Ord i, Cap c) => CoordSys (TokenG i c) where
+  type GCap (TokenG i c) = c
+  type GId (TokenG i c) = i
+  resolveCaps i cs (TokenG t)
+    | i == tokenOwner t = Right idE
+    | otherwise = Left . Just . TokenG $ requestToken i t
+  resolveEffect i e g@(TokenG t)
+    | i == tokenOwner t = Right g
+    | otherwise = Left . mincap $ e
+  localCaps i (TokenG t)
+    | i == tokenOwner t = fullCaps
+    | otherwise = emptyCaps
 
 {-| Grant a token if appropriate (@i@ is owner and token has been
   requested), or make no change otherwise. -}

@@ -263,6 +263,9 @@ instance (Meet c, Semigroup c) => Semigroup (Caps c) where
 instance (BMeet c, Monoid c) => Monoid (Caps c) where
   mempty = emptyCaps
 
+instance Functor Caps where
+  fmap f (Caps rc wc) = Caps (f rc) (f wc)
+
 -- | An empty capability pair, allowing any concurrent update by
 -- remote operations and allowing no local update.  This is a synonym
 -- for 'mempty'.
