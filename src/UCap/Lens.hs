@@ -9,6 +9,7 @@ module UCap.Lens
   , nonNull
   , nonList
   , nonMap
+  , nonCheat
   ) where
 
 import UCap.Domain.Classes (Meet (..), BMeet (..))
@@ -50,3 +51,8 @@ nonList = nonNull
   value. -}
 nonMap :: (Ord k) => Lens' (Maybe (Map k a)) (Map k a)
 nonMap = nonNull
+
+{-| A cheating version of 'nonNull' that has no empty value.  If this
+  accesses a 'Nothing' value, it throws a runtime error. -}
+nonCheat :: Lens' (Maybe a) a
+nonCheat = nani (error "nonCheat got Nothing") (const False)
