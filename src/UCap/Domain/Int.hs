@@ -82,7 +82,7 @@ intE :: Int -> IntE
 intE n | n >= 0 = addE n -- Canonical 0 is (AddE 0), but Eq and Ord
                          -- do not differentiate (AddE 0) from
                          -- (SubE 0).
-intE n | n < 0 = addE (-n)
+intE n | n < 0 = subE (-n)
 
 addE :: Int -> IntE
 addE = AddE . incE
@@ -98,7 +98,8 @@ invertIntE (SubE (DecE e)) = AddE e
 newtype IncC = IncC (AddBound Int) deriving (Show,Eq,Ord)
 
 incC :: Int -> IncC
-incC = IncC . addB
+incC n | n >= 0 = IncC . addB $ n
+       | otherwise = error $ "Oops, " ++ show n ++ " is < 0."
 
 incInfC :: IncC
 incInfC = IncC meetId
@@ -155,7 +156,7 @@ instance Split DecC where
 
 instance Cap DecC where
   type CEffect DecC = DecE
-  mincap = decC . intOffset
+  mincap (DecE (IncE n)) = decC n
 
 instance MaxEffect DecC where
   maxEffect (DecC c) = DecE <$> maxEffect c

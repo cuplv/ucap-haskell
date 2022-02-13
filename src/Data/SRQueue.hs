@@ -38,7 +38,9 @@ data SRQueue a
 
 instance (Ord a) => Semigroup (SRQueue a) where
   SRQueue g1 as1 <> SRQueue g2 as2 =
-    let fr (a1:as1) (a2:as2) | a1 == a2 = a1 : fr as1 as2
+    let fr [] as2 = as2
+        fr as1 [] = as1
+        fr (a1:as1) (a2:as2) | a1 == a2 = a1 : fr as1 as2
                              | a1 > a2 = a1 : fr as1 (a2:as2)
                              | a1 < a2 = a2 : fr (a1:as1) as2
         g' = max g1 g2

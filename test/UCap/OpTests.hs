@@ -19,17 +19,17 @@ generic = testGroup "Generic"
      evalOp (mapOp (++ "b") `pipe` mapOp (++ "c") & withInput "a")
      @?= pure' "abc"
   ,testCase "effect" $
-     execOp 1 (query (uniC::CounterC Int) >>> effect (addE 1))
+     execOp 1 (query (uniC::IntC) >>> effect (addE 1))
      @?= pure' (2,1)
   ,testCase "effect2" $
-     execOp 1 (effect (addE 1) *> query (uniC::CounterC Int))
+     execOp 1 (effect (addE 1) *> query (uniC::IntC))
      @?= pure' (2,2)
   ,testCase "pair" $
      evalOp (pairOp (mapOp (++ "b")) (mapOp (++ "c")) & withInput "a")
      @?= pure' ("ab","ac")
   ,testCase "pair2" $
      let o1 = pairOp
-                (query (uniC::CounterC Int) >>> effect (addE 1))
+                (query (uniC::IntC) >>> effect (addE 1))
                 (mapOp (++ "b"))
          o2 = pairOp
                 (query uniC >>> effect (addE 2))

@@ -173,6 +173,9 @@ data TokenG i c
   = TokenG (Token i)
   deriving (Show,Eq,Ord)
 
+mkTokenG :: i -> TokenG i c
+mkTokenG = TokenG . mkToken
+
 instance (Ord i) => Semigroup (TokenG i c) where
   TokenG t1 <> TokenG t2 = TokenG (t1 <> t2)
 
@@ -318,19 +321,6 @@ escrowHandleReqs i p =
                       Nothing -> Just p'
         Left _ -> Nothing
     Nothing -> Nothing
-
--- escrowHandleReqs'
---   :: (Ord i)
---   => i
---   -> EscrowIntPool i
---   -> Either () (EscrowIntPool i)
--- escrowHandleReqs i p =
---   case srDequeue (p ^. acct i . epaRequests) of
---     Just (rs',EscrowIntRequest i2 amt) ->
---       case escrowTransfer i (i2,amt) p of
---         Right p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
---         Left _ -> p
---     Nothing -> p
 
 escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
 escrowAccept i p =
