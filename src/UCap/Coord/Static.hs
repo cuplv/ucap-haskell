@@ -29,7 +29,7 @@ instance Semigroup (IdentityG i c) where
 instance Monoid (IdentityG i c) where
   mempty = IdentityG
 
-instance (Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
+instance (Ord i, Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
   type GId (IdentityG i c) = i
   type GCap (IdentityG i c) = c
   resolveCaps _ (Caps _ wc) IdentityG =
@@ -52,7 +52,7 @@ instance Semigroup (UniversalG i c) where
 instance Monoid (UniversalG i c) where
   mempty = UniversalG
 
-instance (Cap c, Eq (CEffect c)) => CoordSys (UniversalG i c) where
+instance (Ord i, Cap c, Eq (CEffect c)) => CoordSys (UniversalG i c) where
   type GId (UniversalG i c) = i
   type GCap (UniversalG i c) = c
   resolveCaps _ (Caps rc _) UniversalG | isUni rc = Right idE

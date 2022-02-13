@@ -19,7 +19,7 @@ type family GEffect g where
 type family GState g where
   GState g = CState (GCap g)
 
-class (Cap (GCap g), Semigroup g) => CoordSys g where
+class (Ord (GId g), Cap (GCap g), Semigroup g) => CoordSys g where
 
   {-| The type of capabilities (which also defines the state and effect
   types). -}

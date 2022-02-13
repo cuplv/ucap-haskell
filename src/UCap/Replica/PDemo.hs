@@ -2,6 +2,7 @@
 
 module UCap.Replica.PDemo where
 
+import UCap.Coord
 import UCap.Domain
 import UCap.Lens
 import UCap.Replica
@@ -13,55 +14,53 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 
-type PScript i c m = ScriptT i c m ()
+type PScript g m = ScriptT g m ()
 
-data RepState i c m
+data RepState g m
   = Idle
-  | Running (PScript i c m)
-  | Waiting (ScriptB i c m ())
+  | Running (PScript g m)
+  | Waiting (ScriptB g m ())
 
-isIdle :: RepState i c m -> Bool
+isIdle :: RepState g m -> Bool
 isIdle Idle = True
 isIdle _ = False
 
-type PState i c m = Map i (RepState i c m)
+type PState g m = Map (GId g) (RepState g m)
 
-type PDemo i c m = StateT (PState i c m) (DemoState i c m)
+type PDemo g m = StateT (PState g m) (DemoState g m)
 
 runPDemo
-  :: (Ord i, Cap c, Monad m)
-  => CState c
-  -> RState i c
-  -> PState i c m
-  -> PDemo i c m a
-  -> m ((a, PState i c m), RState i c)
+  :: (CoordSys g, Monad m)
+  => GState g
+  -> RState g
+  -> PState g m
+  -> PDemo g m a
+  -> m ((a, PState g m), RState g)
 runPDemo s0 rs0 p0 act =
   runDemo s0 rs0 (runStateT act p0)
 
 evalPDemo
-  :: (Ord i, Cap c, Monad m)
-  => Map i (PScript i c m)
-  -> Capconf i c
-  -> Coord i c
-  -> CState c
-  -> PDemo i c m a
+  :: (CoordSys g, Monad m)
+  => Map (GId g) (PScript g m)
+  -> g
+  -> GState g
+  -> PDemo g m a
   -> m a
-evalPDemo psc0 cc0 cd0 s0 act =
+evalPDemo psc0 g0 s0 act =
   fst
   <$> evalDemo
         (Map.keys psc0)
-        cc0
-        cd0
+        g0
         s0
         (runStateT act (Map.map Running psc0))
 
-replicaIds :: (Ord i, Monad m) => PDemo i c m [i]
+replicaIds :: (Monad m) => PDemo g m [GId g]
 replicaIds = Map.keys <$> get
 
 getScript
-  :: (Ord i, Cap c, Monad m)
-  => i
-  -> PDemo i c m (Maybe (PScript i c m))
+  :: (CoordSys g, Monad m)
+  => GId g
+  -> PDemo g m (Maybe (PScript g m))
 getScript i = do
   scm <- use $ at i
   case scm of
@@ -73,7 +72,7 @@ getScript i = do
 {-| Evaluate a replica's script until it either blocks or terminates.
   If any progress was made, 'True' is returned.  If the replica was
   already 'Idle' or stuck in 'Waiting', 'False' is returned. -}
-evalRep :: (Ord i, Cap c, Monad m) => i -> PDemo i c m Bool
+evalRep :: (CoordSys g, Monad m) => GId g -> PDemo g m Bool
 evalRep i = do
   scm <- getScript i
   case scm of
@@ -86,7 +85,7 @@ evalRep i = do
     _ -> return False
 
 {-| Perform 'evalRep' and then 'broadcast' if any updates were made. -}
-evalRepB :: (Ord i, Cap c, Monad m) => i -> PDemo i c m Bool
+evalRepB :: (CoordSys g, Monad m) => GId g -> PDemo g m Bool
 evalRepB i = do
   r <- evalRep i
   if r
@@ -95,7 +94,7 @@ evalRepB i = do
   return r
 
 {-| List of replicas which are not in the 'Idle' state. -}
-nonIdle :: (Ord i, Monad m) => PDemo i c m [i]
+nonIdle :: (CoordSys g, Monad m) => PDemo g m [GId g]
 nonIdle = catMaybes <$> (traverse f =<< replicaIds)
   where f i = do
           m <- get
@@ -112,7 +111,7 @@ nonIdle = catMaybes <$> (traverse f =<< replicaIds)
   deadlocked ('Waiting' with no opportunity to resume).  The IDs of
   deadlocked replicas are returned, so an empty list indicates
   successful completion. -}
-loopSeqPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
+loopSeqPD :: (CoordSys g, Monad m) => PDemo g m [GId g]
 loopSeqPD = do
   rids <- replicaIds
   progress <- or <$> traverse evalRepB rids
@@ -126,7 +125,7 @@ loopSeqPD = do
 
   This imposes inconsistency.  A replica may act upon a view of
   the state that other replicas do not share. -}
-loopPD :: (Ord i, Cap c, Monad m) => PDemo i c m [i]
+loopPD :: (CoordSys g, Monad m) => PDemo g m [GId g]
 loopPD = do
   rids <- replicaIds
   progress <- or <$> traverse evalRep rids
@@ -135,7 +134,7 @@ loopPD = do
      then traverse_ broadcast rids >> loopPD
      else return nonIs
 
-addScript :: (Ord i, Monad m) => i -> PScript i c m -> PDemo i c m ()
+addScript :: (CoordSys g, Monad m) => GId g -> PScript g m -> PDemo g m ()
 addScript i sc = do
   scm <- use $ at i
   case scm of
@@ -149,14 +148,14 @@ addScript i sc = do
 {-| @'unicast i1 i2'@ sends an update from @i1@ to @i2@.  After doing
   so, @i2@ will have seen all events that @i1@ has, and @i2@'s
   coordination information includes that of @i1@. -}
-unicast :: (Ord i, Cap c, Monad m) => i -> i -> PDemo i c m ()
+unicast :: (CoordSys g, Monad m) => GId g -> GId g -> PDemo g m ()
 unicast send recv = lift $ observeD recv send
 
 {-| Send updates from the given replica to all others. -}
-broadcast :: (Ord i, Cap c, Monad m) => i -> PDemo i c m ()
+broadcast :: (CoordSys g, Monad m) => GId g -> PDemo g m ()
 broadcast i = do
   rids <- filter (/= i) <$> replicaIds
   traverse_ (unicast i) rids
 
-liftPDemo :: (Monad m) => m a -> PDemo i c m a
+liftPDemo :: (Monad m) => m a -> PDemo g m a
 liftPDemo = lift . liftDemo
