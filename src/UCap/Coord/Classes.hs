@@ -50,14 +50,20 @@ class (Cap (GCap g), Semigroup g) => CoordSys g where
   undoEffect :: GId g -> GEffect g -> g -> g
   undoEffect _ _ = id
 
-  grantRequests :: GId g -> g -> g
-  grantRequests _ = id
+  grantRequests :: GId g -> g -> Maybe g
+  grantRequests _ _ = Nothing
 
 la2 f a b = f <$> a <*> b
 
 la3 f a b c = f <$> a <*> b <*> c
 
 la4 f a b c d = f <$> a <*> b <*> c <*> d
+
+l2j (Left e) = Just e
+l2j _ = Nothing
+
+j2l (Just a) = Left a
+j2l Nothing = Right ()
 
 instance (GId a ~ GId b, CoordSys a, CoordSys b) => CoordSys (a,b) where
   type GCap (a,b) = (GCap a, GCap b)
@@ -70,7 +76,9 @@ instance (GId a ~ GId b, CoordSys a, CoordSys b) => CoordSys (a,b) where
     <<*>> (eitherToWF idC $ resolveEffect i eb b)
   localCaps i (a,b) = (,) <$> localCaps i a <*> localCaps i b
   undoEffect i (ea,eb) (a,b) = (undoEffect i ea a, undoEffect i eb b)
-  grantRequests i (a,b) = (grantRequests i a, grantRequests i b)
+  grantRequests i (a,b) = l2j . failToEither $ WhenFail (,) (,)
+    <<*>> (eitherToWF a . j2l $ grantRequests i a)
+    <<*>> (eitherToWF b . j2l $ grantRequests i b)
 
 instance (GId a ~ GId b, GId a ~ GId c, CoordSys a, CoordSys b, CoordSys c) => CoordSys (a,b,c) where
   type GCap (a,b,c) = (GCap a, GCap b, GCap c)
@@ -91,10 +99,10 @@ instance (GId a ~ GId b, GId a ~ GId c, CoordSys a, CoordSys b, CoordSys c) => C
     (undoEffect i ea a)
     (undoEffect i eb b)
     (undoEffect i ec c)
-  grantRequests i (a,b,c) = (,,)
-    (grantRequests i a)
-    (grantRequests i b)
-    (grantRequests i c)
+  grantRequests i (a,b,c) = l2j . failToEither $ WhenFail (,,) (,,)
+    <<*>> (eitherToWF a . j2l $ grantRequests i a)
+    <<*>> (eitherToWF b . j2l $ grantRequests i b)
+    <<*>> (eitherToWF c . j2l $ grantRequests i c)
 
 instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, CoordSys c, CoordSys d) => CoordSys (a,b,c,d) where
   type GCap (a,b,c,d) = (GCap a, GCap b, GCap c, GCap d)
@@ -119,11 +127,11 @@ instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, C
     (undoEffect i eb b)
     (undoEffect i ec c)
     (undoEffect i ed d)
-  grantRequests i (a,b,c,d) = (,,,)
-    (grantRequests i a)
-    (grantRequests i b)
-    (grantRequests i c)
-    (grantRequests i d)
+  grantRequests i (a,b,c,d) = l2j . failToEither $ WhenFail (,,,) (,,,)
+    <<*>> (eitherToWF a . j2l $ grantRequests i a)
+    <<*>> (eitherToWF b . j2l $ grantRequests i b)
+    <<*>> (eitherToWF c . j2l $ grantRequests i c)
+    <<*>> (eitherToWF d . j2l $ grantRequests i d)
 
 data Token i
   = Token { _tkOwner :: SECell i
@@ -180,14 +188,14 @@ instance (Ord i, Cap c) => CoordSys (TokenG i c) where
   localCaps i (TokenG t)
     | i == tokenOwner t = fullCaps
     | otherwise = emptyCaps
-  grantRequests i (TokenG t) = TokenG $ handleTokenReqs i t
+  grantRequests i (TokenG t) = TokenG <$> handleTokenReqs i t
 
 {-| Grant a token if appropriate (@i@ is owner and token has been
-  requested), or make no change otherwise. -}
-handleTokenReqs :: (Eq i) => i -> Token i -> Token i
+  requested), or return 'Nothing' if no change is made. -}
+handleTokenReqs :: (Eq i) => i -> Token i -> Maybe (Token i)
 handleTokenReqs i t = case grantToken i t of
-                        Right t' -> t'
-                        Left _ -> t
+                        Right t' -> Just t'
+                        Left _ -> Nothing
 
 data EscrowIntRequest i
   = EscrowIntRequest { _eprAsker :: i
@@ -296,14 +304,33 @@ escrowTransfer i (i2,amt) p = do
   p' <- escrowUse i amt p
   return $ p' & acct i2 . epaInbox %~ srEnqueue amt
 
-escrowHandleReqs :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
+escrowHandleReqs
+  :: (Ord i)
+  => i
+  -> EscrowIntPool i
+  -> Maybe (EscrowIntPool i)
 escrowHandleReqs i p =
   case srDequeue (p ^. acct i . epaRequests) of
     Just (rs',EscrowIntRequest i2 amt) ->
       case escrowTransfer i (i2,amt) p of
-        Right p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
-        Left _ -> p
-    Nothing -> p
+        Right p' -> case escrowHandleReqs i (p' & acct i . epaRequests .~ rs') of
+                      Just p'' -> Just p''
+                      Nothing -> Just p'
+        Left _ -> Nothing
+    Nothing -> Nothing
+
+-- escrowHandleReqs'
+--   :: (Ord i)
+--   => i
+--   -> EscrowIntPool i
+--   -> Either () (EscrowIntPool i)
+-- escrowHandleReqs i p =
+--   case srDequeue (p ^. acct i . epaRequests) of
+--     Just (rs',EscrowIntRequest i2 amt) ->
+--       case escrowTransfer i (i2,amt) p of
+--         Right p' -> escrowHandleReqs i (p' & acct i . epaRequests .~ rs')
+--         Left _ -> p
+--     Nothing -> p
 
 escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
 escrowAccept i p =

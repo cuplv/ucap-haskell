@@ -37,3 +37,4 @@ instance (Ord (GId g), Ord (GState g), CoordSys g)
     | cs `leqCaps` fullConstG =
       bimap (fmap ConstG) ModifyE $ resolveCaps i (lowerC <$> cs) g
     | otherwise = Left Nothing
+  grantRequests i (ConstG g) = ConstG <$> grantRequests i g

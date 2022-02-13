@@ -10,6 +10,7 @@ module UCap.Op
   , execWith
   , readReq
   , writeReq
+  , capsReq
   , pipe
   , idOp
   , query
@@ -97,3 +98,9 @@ readReq (Op r _ _ _) = r
 {-| Get the write requirement of an operation. -}
 writeReq :: Op c m a b -> c
 writeReq (Op _ w _ _) = w
+
+{-| Get the 'Caps' requirement of an operation (combining 'readReq' and 'writeReq'). -}
+capsReq :: Op c m a b -> Caps c
+capsReq t = Caps { capsRead = readReq t
+                 , capsWrite = writeReq t
+                 }

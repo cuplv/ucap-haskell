@@ -36,7 +36,7 @@ instance (Ord i) => CoordSys (IncEscrow i) where
                   , capsWrite = escrowOwned i g
                   }
   undoEffect i e (IncEscrow g) = IncEscrow $ escrowAdd i (intOffset e) g
-  grantRequests i (IncEscrow g) = IncEscrow $ escrowHandleReqs i g
+  grantRequests i (IncEscrow g) = IncEscrow <$> escrowHandleReqs i g
 
 data DecEscrow i
   = DecEscrow (IncEscrow i)
@@ -54,7 +54,7 @@ instance (Ord i) => CoordSys (DecEscrow i) where
     resolveEffect i e g
   localCaps i (DecEscrow g) = DecC <$> localCaps i g
   undoEffect i (DecE e) (DecEscrow g) = DecEscrow $ undoEffect i e g
-  grantRequests i (DecEscrow g) = DecEscrow $ grantRequests i g
+  grantRequests i (DecEscrow g) = DecEscrow <$> grantRequests i g
 
 data IntEscrow i
   = IntEscrow { addEscrow :: IncEscrow i
@@ -86,6 +86,7 @@ instance (Ord i) => CoordSys (IntEscrow i) where
   undoEffect i e (IntEscrow a s) = case e of
     AddE e -> IntEscrow (undoEffect i e a) s
     SubE e -> IntEscrow a (undoEffect i e s)
-  grantRequests i (IntEscrow a s) = IntEscrow
-    (grantRequests i a)
-    (grantRequests i s)
+  grantRequests i (IntEscrow a s) =
+    l2j . failToEither $ WhenFail IntEscrow (,)
+      <<*>> (eitherToWF a . j2l $ grantRequests i a)
+      <<*>> (eitherToWF s . j2l $ grantRequests i s)
