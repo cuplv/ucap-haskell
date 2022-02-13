@@ -7,7 +7,6 @@ import UCap.Domain
 import UCap.Lens
 import UCap.Op
 import UCap.Replica
-import UCap.Replica.Coord
 import UCap.Replica.Demo
 import UCap.Replica.PDemo
 

@@ -79,17 +79,17 @@ instance EffectDom IntE where
   eFun a s = s + (intOffset a)
 
 intE :: Int -> IntE
-intE n | n >= 0 = addIntE n -- Canonical 0 is (AddE 0), but Eq and Ord
-                            -- do not differentiate (AddE 0) from
-                            -- (SubE 0).
-intE n | n < 0 = addIntE (-n)
+intE n | n >= 0 = addE n -- Canonical 0 is (AddE 0), but Eq and Ord
+                         -- do not differentiate (AddE 0) from
+                         -- (SubE 0).
+intE n | n < 0 = addE (-n)
 
-addIntE :: Int -> IntE
-addIntE = AddE . incE
+addE :: Int -> IntE
+addE = AddE . incE
 
-subIntE :: Int -> IntE
-subIntE 0 = mempty -- AddE 0 instead of SubE 0
-subIntE n = SubE $ decE n
+subE :: Int -> IntE
+subE 0 = mempty -- AddE 0 instead of SubE 0
+subE n = SubE $ decE n
 
 invertIntE :: IntE -> IntE
 invertIntE (AddE e) = SubE (DecE e)
@@ -167,22 +167,28 @@ data IntC
   deriving (Show,Eq,Ord)
 
 intC :: Int -> IntC
-intC n | n >= 0 = addIntC n
-       | n < 0 = subIntC (-n)
+intC n | n >= 0 = addC n
+       | n < 0 = subC (-n)
 
-addIntC :: Int -> IntC
-addIntC n = IntC (incC n) mempty
+addC :: Int -> IntC
+addC n = IntC (incC n) mempty
 
 fromIncC :: IncC -> IntC
 fromIncC a = IntC a mempty
 
-subIntC :: Int -> IntC
-subIntC 0 = mempty
-subIntC n = IntC mempty (decC n)
+addAny :: IntC
+addAny = fromIncC incInfC
+
+subC :: Int -> IntC
+subC 0 = mempty
+subC n = IntC mempty (decC n)
 
 fromDecC :: DecC -> IntC
 fromDecC a | a == mempty = mempty
            | otherwise = IntC mempty a
+
+subAny :: IntC
+subAny = fromDecC decInfC
 
 instance Semigroup IntC where
   IntC a1 s1 <> IntC a2 s2 = IntC (a1 <> a2) (s1 <> s2)

@@ -35,8 +35,8 @@ module UCap.Op
   , _2ed
   , _3ed
   , _4ed
-  -- * Operations for 'Data.Num' types
-  , module UCap.Op.Num
+  -- * Operations for an 'Int' store
+  , module UCap.Op.Int
   -- * Lifters for 'Data.Either.Either'
   , module UCap.Op.Either
   -- * Operations and Lifters for 'Data.Map.Map'
@@ -48,7 +48,7 @@ import UCap.Lifter
 import UCap.Op.Either
 import UCap.Op.Internal
 import UCap.Op.Map
-import UCap.Op.Num
+import UCap.Op.Int
 
 import Control.Arrow ((>>>),(<<<))
 

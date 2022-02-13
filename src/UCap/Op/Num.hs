@@ -1,6 +1,7 @@
 module UCap.Op.Num where
 
-import UCap.Domain
+import UCap.Domain.Classes
+import UCap.Domain.Num
 import UCap.Op.Internal
 
 import Control.Monad.Except
