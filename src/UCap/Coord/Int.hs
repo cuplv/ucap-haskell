@@ -24,6 +24,7 @@ instance (Ord i) => CoordSys (IncEscrow i) where
       Just wn | wn <= owned -> 
                 case incBound . capsRead $ cs of
                   Just _ -> Right $ incE unowned
+                  Nothing -> Right $ idE
               | otherwise -> 
                 Left $ IncEscrow <$> escrowRequest' i (wn - owned) g
       Nothing -> Left Nothing

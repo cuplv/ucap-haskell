@@ -241,8 +241,11 @@ instance (Ord i) => Semigroup (EscrowIntPool i) where
   EscrowIntPool a1 sk1 sr1 <> EscrowIntPool a2 _ _ =
     EscrowIntPool (Map.unionWith (<>) a1 a2) sk1 sr1
 
+instance (Ord i) => Monoid (EscrowIntPool i) where
+  mempty = EscrowIntPool Map.empty [] []
+
 initEscrow :: [i] -> [i] -> Map i Int -> EscrowIntPool i
-initEscrow sinks sources amounts =
+initEscrow sources sinks amounts =
   EscrowIntPool { _epSinks = sinks
                 , _epSources = sources
                 , _epAccounts = Map.map initAccount amounts

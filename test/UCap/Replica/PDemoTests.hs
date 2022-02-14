@@ -26,6 +26,7 @@ testPDemo = testGroup "PDemo"
   ,loops
   ,tqueues
   ,tmany
+  ,tescrow
   ]
 
 type IntOp = Op IntC Identity ()
@@ -56,15 +57,12 @@ intModder2 l1 l2 = do
 
 abUI :: TokenG String c
 abUI = mkTokenG alpha
--- abUI = capsFromList [(alpha,uniC),(beta,idC)] 
 
 abIU :: (Cap c) => TokenG String c
 abIU = mkTokenG beta
--- abIU = capsFromList [(alpha,idC),(beta,uniC)] 
 
 abUU :: (Cap c) => UniversalG String c
 abUU = UniversalG
--- abUU = capsFromList [(alpha,uniC),(beta,uniC)] 
 
 tqueues = testGroup "Transaction queues" $
   let act1 :: PDemo (UniversalG String IntC) (State [IntOp ()]) (Int,Int,Int)
@@ -125,24 +123,6 @@ loops = testGroup "Loops" $
          evalPDemo m g0 0 (act loopPD) @?= Identity ([],10,18)
      ]
 
--- requests = testGroup "Requests" $
---   [testCase "1 Request" $
---      evalPDemo (Map.fromList [(alpha, await grantLock)
---                              ,(beta, do ac <- acquireLock
---                                         await ac)])
---                (abUI :: TokenG String IntC)
---                -- (withLock alpha)
---                0
---                (do loopPD
---                    rst <- lift get
---                    return (rst ^. coordL beta, rst ^. capsL beta))
---      @?= Identity (fst . grantReq alpha . requestLock beta $ withLock alpha
---                   ,acceptG beta
---                    . mdropG alpha idC
---                    . fromJust . transferG alpha (beta,uniC)
---                    $ abUI)
---   ]
-
 type MyC = (IntC, ConstC' (IdentityC [Int]))
 
 type MyG = TokenG String MyC
@@ -201,28 +181,30 @@ misc = testGroup "Misc" $
      split (uniC :: ConstC (IdentityC [Int]) [Int]) uniC @?= Right uniC
   ,testCase "Order CounterC" $
      (uniC :: IntC) <=? uniC @?= True
-  -- ,testCase "dropG" $
-  --    capsFlatten <$> (dropG alpha uniC (abUI :: TokenG String TestC))
-  --    @?= capsFlatten <$> (Just abUI)
-  -- ,testCase "dropG 2" $
-  --    capsFlatten <$> dropG alpha (mincap (idE, ConstE [1]))
-  --                                (abUI :: TokenG String TestC)
-  --    @?= capsFlatten <$> Just abUI
-  -- ,testCase "transferG" $
-  --    capsFlatten <$> transferG alpha (beta,uniC :: TestC) abUI
-  --    @?= capsFlatten <$> (Just abUU)
-  -- ,testCase "transferG 2" $
-  --    capsFlatten <$> (mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI)
-  --    @?= capsFlatten <$> (Just abIU)
-  -- ,testCase "transferG 3" $
-  --    do let cc1 = mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI
-  --       -- print cc1
-  --       let cc2 = mdropG beta idC <$> (transferG beta (alpha, uniC) =<< acceptG beta <$> cc1)
-  --       capsFlatten <$> cc2 @?= capsFlatten <$> Just abUI
-  -- ,testCase "transferG 3.1" $
-  --    capsFlatten <$> ((\cc -> mdropG beta idC <$> transferG beta (alpha, uniC) cc) =<< acceptG beta <$> (mdropG alpha idC <$> transferG alpha (beta,uniC :: TestC) abUI))
-  --    @?= capsFlatten <$> (Just abUI)
-  -- ,testCase "transferG 4" $
-  --    capsFlatten <$> transferG beta (alpha, uniC :: TestC) abIU
-  --    @?= capsFlatten <$> (Just abUU)
+  ]
+
+escSys1 :: IntEscrow String
+escSys1 = IntEscrow
+  { addEscrow = IncEscrow $ initEscrow ["A"] [] (Map.fromList [("A",102), ("B",3), ("C",2)])
+  , subEscrow = DecEscrow $ IncEscrow $ mempty
+  }
+
+esc1 :: ScriptT (IntEscrow String) Identity ()
+esc1 = loopBlock (grantRequests' `andThen` error "Asdfman")
+
+esc2 :: ScriptT (IntEscrow String) Identity ()
+esc2 = do
+  rs <- transactMany . repeat $ effect (addE 1)
+  loopBlock grantRequests'
+
+tescrow = testGroup "Escrow" $
+  [testCase "Escrow 1" $
+     -- Replicas B and C should be able to use all of A's resources,
+     -- but no more, in their transactions before they get stuck.
+     evalPDemo
+       (Map.fromList [("A",esc1), ("B",esc2), ("C",esc2)])
+       escSys1
+       0
+       (loopPD >> lift (stateD "A"))
+     @?= Identity 107
   ]
