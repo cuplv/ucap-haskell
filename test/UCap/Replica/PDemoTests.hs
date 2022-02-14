@@ -9,6 +9,7 @@ import UCap.Domain
 import UCap.Lens
 import UCap.Op
 import UCap.Replica
+import UCap.Replica.Transact
 import UCap.Replica.Demo
 import UCap.Replica.PDemo
 

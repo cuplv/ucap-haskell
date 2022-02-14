@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module UCap.Replica.VClock
   ( VClock
   , zeroClock
@@ -13,14 +15,21 @@ module UCap.Replica.VClock
 
 import UCap.Domain.Classes
 
+import Data.Aeson
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Lazy
+import GHC.Generics
 
 {- | A vector clock using process ID type @i@. -}
 data VClock i
   = VClock (Map i Int)
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON i, ToJSONKey i) => ToJSON (VClock i)
+instance (ToJSON i, ToJSONKey i) => ToJSONKey (VClock i)
+instance (FromJSON i, FromJSONKey i, Ord i) => FromJSON (VClock i)
+instance (FromJSON i, FromJSONKey i, Ord i) => FromJSONKey (VClock i)
 
 instance (Ord i) => Meet (VClock i) where
   (<=?) = leVC
