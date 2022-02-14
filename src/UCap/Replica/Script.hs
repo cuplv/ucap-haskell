@@ -13,6 +13,7 @@ module UCap.Replica.Script
   , RepCtx'
   , unwrapScript
   , getReplicaId
+  , writeGE
   , emitEffect
   , setCoord
   , onCoord
@@ -56,6 +57,9 @@ type ScriptB g m a = Block (RepCtx' g) (ReaderT (GId g) m) (ScriptT g m a)
 
 getReplicaId :: (MonadReader i m) => m i
 getReplicaId = ask
+
+writeGE :: (Monad m) => g -> GEffect g -> ScriptT g m ()
+writeGE g e = writeState $ RepCtx e (Just g)
 
 emitEffect :: (Monad m) => GEffect g -> ScriptT g m ()
 emitEffect e = writeState $ RepCtx e Nothing

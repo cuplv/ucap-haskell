@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -8,17 +9,22 @@ import UCap.Replica.Types
 import UCap.Replica.VClock
 
 import Control.Monad (foldM)
+import Data.Aeson
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import GHC.Generics
 
 data VThread i d
   -- Each thread holds a main clock and a list of events.  The main
   -- clock gives the highest clock number for every other thread that
   -- has been witnessed by that thread.
   = VThread (Map i (VClock i, [Event i d]))
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON i, ToJSONKey i, ToJSON d) => ToJSON (VThread i d)
+instance (Ord i, FromJSON i, FromJSONKey i, FromJSON d) => FromJSON (VThread i d)
 
 {-| An event with a payload.  The event's clock gives the sequence
   numbers of the latest event of every process (including this event's
@@ -64,6 +70,11 @@ event i d (VThread m) = VThread $ Map.alter
      in Just (tick i v, es ++ [(v,d)]))
   i
   m
+
+{-| Add a new event, with designated clock, to a thread.  Return 'Nothing' if the event's causal
+  closure is not available. -}
+event' :: (Ord i) => i -> (VClock i, d) -> VThread i d -> Maybe (VThread i d)
+event' i (v,d) (VThread m) = undefined
 
 {-| Get an event referred to by an 'EventId' (or 'Nothing' if the event
   does not exist. -}

@@ -54,8 +54,9 @@ transactSimple t = do
       let g' = case resolveEffect rid e (ctx^.rsCoord) of
                  Right g' -> g'
                  Left _ -> error "Write error."
-      emitEffect e
-      setCoord g'
+      -- emitEffect e
+      -- setCoord g'
+      writeGE g' e
       return (Right a)
     Left (Just g') -> return (Left g')
     Left Nothing -> error "No way to request the needed caps."
@@ -72,8 +73,9 @@ runUpdate t s = do
   let g' = case resolveEffect rid e g of
              Right g' -> g'
              Left _ -> error "Write error."
-  emitEffect e
-  setCoord g'
+  -- emitEffect e
+  -- setCoord g'
+  writeGE g' e
   return a
 
 transact

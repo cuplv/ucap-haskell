@@ -4,12 +4,12 @@
 module UCap.Replica.Http where
 
 import UCap.Coord
+import UCap.Replica.MRep
 
 import Data.Aeson
 
 class
-  ( GId g ~ String
-  , CoordSys g
+  ( MCS g
   , ToJSON g
   , ToJSON (GCap g)
   , ToJSON (GEffect g)
