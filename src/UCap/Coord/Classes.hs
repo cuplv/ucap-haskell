@@ -53,6 +53,9 @@ class (Ord (GId g), Cap (GCap g), Semigroup g) => CoordSys g where
   grantRequests :: GId g -> g -> Maybe g
   grantRequests _ _ = Nothing
 
+  acceptGrants :: GId g -> g -> Maybe g
+  acceptGrants _ _ = Nothing
+
 la2 f a b = f <$> a <*> b
 
 la3 f a b c = f <$> a <*> b <*> c
@@ -79,6 +82,9 @@ instance (GId a ~ GId b, CoordSys a, CoordSys b) => CoordSys (a,b) where
   grantRequests i (a,b) = l2j . failToEither $ WhenFail (,) (,)
     <<*>> (eitherToWF a . j2l $ grantRequests i a)
     <<*>> (eitherToWF b . j2l $ grantRequests i b)
+  acceptGrants i (a,b) = l2j . failToEither $ WhenFail (,) (,)
+    <<*>> (eitherToWF a . j2l $ acceptGrants i a)
+    <<*>> (eitherToWF b . j2l $ acceptGrants i b)
 
 instance (GId a ~ GId b, GId a ~ GId c, CoordSys a, CoordSys b, CoordSys c) => CoordSys (a,b,c) where
   type GCap (a,b,c) = (GCap a, GCap b, GCap c)
@@ -103,6 +109,10 @@ instance (GId a ~ GId b, GId a ~ GId c, CoordSys a, CoordSys b, CoordSys c) => C
     <<*>> (eitherToWF a . j2l $ grantRequests i a)
     <<*>> (eitherToWF b . j2l $ grantRequests i b)
     <<*>> (eitherToWF c . j2l $ grantRequests i c)
+  acceptGrants i (a,b,c) = l2j . failToEither $ WhenFail (,,) (,,)
+    <<*>> (eitherToWF a . j2l $ acceptGrants i a)
+    <<*>> (eitherToWF b . j2l $ acceptGrants i b)
+    <<*>> (eitherToWF c . j2l $ acceptGrants i c)
 
 instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, CoordSys c, CoordSys d) => CoordSys (a,b,c,d) where
   type GCap (a,b,c,d) = (GCap a, GCap b, GCap c, GCap d)
@@ -132,6 +142,11 @@ instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, C
     <<*>> (eitherToWF b . j2l $ grantRequests i b)
     <<*>> (eitherToWF c . j2l $ grantRequests i c)
     <<*>> (eitherToWF d . j2l $ grantRequests i d)
+  acceptGrants i (a,b,c,d) = l2j . failToEither $ WhenFail (,,,) (,,,)
+    <<*>> (eitherToWF a . j2l $ acceptGrants i a)
+    <<*>> (eitherToWF b . j2l $ acceptGrants i b)
+    <<*>> (eitherToWF c . j2l $ acceptGrants i c)
+    <<*>> (eitherToWF d . j2l $ acceptGrants i d)
 
 data Token i
   = Token { _tkOwner :: SECell i
@@ -319,9 +334,14 @@ escrowHandleReqs i p =
   case srDequeue (p ^. acct i . epaRequests) of
     Just (rs',EscrowIntRequest i2 amt) ->
       case escrowTransfer i (i2,amt) p of
-        Right p' -> case escrowHandleReqs i (p' & acct i . epaRequests .~ rs') of
-                      Just p'' -> Just p''
-                      Nothing -> Just p'
+        Right p1 ->
+          let p2 = p1 & acct i . epaRequests .~ rs'
+          in case escrowHandleReqs i p2 of
+               Just p3 -> Just p3
+               Nothing -> Just p2
+        -- Right p' -> case escrowHandleReqs i (p' & acct i . epaRequests .~ rs') of
+        --               Just p'' -> Just p''
+        --               Nothing -> Just p'
         Left _ -> Nothing
     Nothing -> Nothing
 

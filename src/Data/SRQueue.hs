@@ -95,11 +95,24 @@ instance (Eq a) => Semigroup (SECell a) where
 seInit :: a -> SECell a
 seInit = SECell 0
 
-seSet :: a -> SECell a -> SECell a
-seSet a (SECell g _) = SECell (g + 1) a
+{-| Set a new cell value.  This must not be concurrent to any other
+  'seSet' or 'seMod'.  If the new value is the same as the old, the
+  'SECell' is not changed and will still be '==' to the old 'SECell'.
+
+@
+seInit a == seSet a (seInit a)
+@
+-}
+seSet :: (Eq a) => a -> SECell a -> SECell a
+seSet a s@(SECell g a0) | a /= a0 = SECell (g + 1) a
+                        | otherwise = s
 
 seGet :: SECell a -> a
 seGet (SECell _ a) = a
 
-seMod :: (a -> a) -> SECell a -> SECell a
+{-| Change the cell value by modifying the current value with a
+  function.  This must not be concurrent to any other 'seSet' or
+  'seMod'.  If the new value is the same as the old, the 'SECell' is
+  not changed and will still be '==' to the old 'SECell'. -}
+seMod :: (Eq a) => (a -> a) -> SECell a -> SECell a
 seMod f c = seSet (f $ seGet c) c

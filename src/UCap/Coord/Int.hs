@@ -38,6 +38,11 @@ instance (Ord i) => CoordSys (IncEscrow i) where
                   }
   undoEffect i e (IncEscrow g) = IncEscrow $ escrowAdd i (intOffset e) g
   grantRequests i (IncEscrow g) = IncEscrow <$> escrowHandleReqs i g
+  acceptGrants i (IncEscrow g) =
+    let g' = escrowAccept i g
+    in if g /= g'
+          then Just $ IncEscrow g'
+          else Nothing
 
 data DecEscrow i
   = DecEscrow (IncEscrow i)
@@ -56,6 +61,7 @@ instance (Ord i) => CoordSys (DecEscrow i) where
   localCaps i (DecEscrow g) = DecC <$> localCaps i g
   undoEffect i (DecE e) (DecEscrow g) = DecEscrow $ undoEffect i e g
   grantRequests i (DecEscrow g) = DecEscrow <$> grantRequests i g
+  acceptGrants i (DecEscrow g) = DecEscrow <$> acceptGrants i g
 
 data IntEscrow i
   = IntEscrow { addEscrow :: IncEscrow i
@@ -91,3 +97,7 @@ instance (Ord i) => CoordSys (IntEscrow i) where
     l2j . failToEither $ WhenFail IntEscrow (,)
       <<*>> (eitherToWF a . j2l $ grantRequests i a)
       <<*>> (eitherToWF s . j2l $ grantRequests i s)
+  acceptGrants i (IntEscrow a s) =
+    l2j . failToEither $ WhenFail IntEscrow (,)
+      <<*>> (eitherToWF a . j2l $ acceptGrants i a)
+      <<*>> (eitherToWF s . j2l $ acceptGrants i s)

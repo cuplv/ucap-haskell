@@ -190,7 +190,7 @@ escSys1 = IntEscrow
   }
 
 esc1 :: ScriptT (IntEscrow String) Identity ()
-esc1 = loopBlock (grantRequests' `andThen` error "Asdfman")
+esc1 = loopBlock grantRequests'
 
 esc2 :: ScriptT (IntEscrow String) Identity ()
 esc2 = do
@@ -202,9 +202,23 @@ tescrow = testGroup "Escrow" $
      -- Replicas B and C should be able to use all of A's resources,
      -- but no more, in their transactions before they get stuck.
      evalPDemo
-       (Map.fromList [("A",esc1), ("B",esc2), ("C",esc2)])
+       (Map.fromList [("A",esc1)
+                     ,("B",esc2)
+                     ,("C",esc2)
+                     ])
        escSys1
        0
        (loopPD >> lift (stateD "A"))
      @?= Identity 107
+  ,testCase "Escrow accept" $
+     let e = initEscrow ["A"] [] 
+               (Map.fromList [("A",102), ("B",3), ("C",2)])
+     in escrowOwned "B" . escrowAccept "B" <$> escrowTransfer "A" ("B",70) e
+        @?= Right 73
+  ,testCase "Escrow accept 2" $
+     let e1 = initEscrow ["A"] [] 
+                (Map.fromList [("A",102), ("B",3), ("C",2)])
+         e2 = initEscrow ["A"] [] 
+                (Map.fromList [("A",32), ("B",73), ("C",2)])
+     in escrowAccept "B" e1 @?= e1
   ]

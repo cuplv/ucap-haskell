@@ -106,6 +106,7 @@ transactMany (o1:os) = do
   complete1 <- transact o1
   await . firstOf $
     [ grantRequests' `andThen_` transactMany (o1:os)
+    , acceptGrants' `andThen_` transactMany (o1:os)
     , complete1 `andThen` (\a -> (a :) <$> transactMany os)
     ]
 
@@ -118,6 +119,7 @@ transactMany_ (o1:os) = do
   complete1 <- transact o1
   await . firstOf $
     [ grantRequests' `andThen_` transactMany_ (o1:os)
+    , acceptGrants' `andThen_` transactMany_ (o1:os)
     , complete1 `andThen_` transactMany_ (os)
     ]
 
@@ -126,5 +128,13 @@ grantRequests' = do
   rid <- lift getReplicaId
   g <- view rsCoord <$> checkState
   case grantRequests rid g of
+    Just g' -> nonBlock $ setCoord g'
+    Nothing -> notReady
+
+acceptGrants' :: (CoordSys g, Monad m) => ScriptB g m ()
+acceptGrants' = do
+  rid <- lift getReplicaId
+  g <- view rsCoord <$> checkState
+  case acceptGrants rid g of
     Just g' -> nonBlock $ setCoord g'
     Nothing -> notReady
