@@ -21,21 +21,16 @@ import Control.Monad.Trans (liftIO)
 import Data.Aeson hiding ((.=))
 import GHC.Generics
 
-class ( GId g ~ String, Eq g, Eq (GEffect g), CoordSys g) => MCS g
+type RId = String
 
-data ESeq e
-  = ESeq { eseqPayload :: [(VC, e)]
-         }
-  deriving (Show,Eq,Ord,Generic)
-
-instance (ToJSON e) => ToJSON (ESeq e)
-instance (FromJSON e) => FromJSON (ESeq e)
+class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g) => MCS g
 
 data BMsg g e
-  = Hello VC
-  | BCast (ESeq e) g
+  = BHello VC
+  | BNewEffect VC e g
+  | BCoord VC g
   | BComplete (VThread String e) g
-  | ERequest Int
+  | BRequest
   deriving (Show,Eq,Ord,Generic)
 
 instance (ToJSON e, ToJSON g) => ToJSON (BMsg g e)
@@ -43,25 +38,26 @@ instance (FromJSON e, FromJSON g) => FromJSON (BMsg g e)
 
 type BMsg' g = BMsg g (GEffect g)
 
-type TBM g e = (String, BMsg g e)
+type TBM g e = (RId, BMsg g e)
 
-type VC = VClock String
+type TBM' g = TBM g (GEffect g)
+
+type VC = VClock RId
 
 data MRepState g e s
   = MRepState { _hrInitState :: s
               , _hrCurrentState :: s
               , _hrCoord :: g
-              , _hrDag :: VThread String e
-              , _hrSendQueue :: [(VC,e)]
+              , _hrDag :: VThread RId e
               , _hrInbox :: TChan (TBM g e)
               }
 
 makeLenses ''MRepState
 
 data MRepInfo g e
-  = MRep { _hrId :: String
-         , _hrOtherIds :: [String]
-         , _hrSend :: String -> String -> BMsg g e -> IO ()
+  = MRep { _hrId :: RId
+         , _hrOtherIds :: [RId]
+         , _hrSend :: RId -> RId -> BMsg g e -> IO ()
          }
 
 makeLenses ''MRepInfo
@@ -91,6 +87,7 @@ mrReadState = RepCtx <$> use hrCurrentState <*> use hrCoord
 
 mrWriteState :: (MCS g) => RepCtx' g -> MRepT g ()
 mrWriteState (RepCtx e mg) = do
+  rid <- view hrId
   g0 <- use hrCoord
   gUp <- case mg of
     Just g | g /= g0 -> do
@@ -99,7 +96,7 @@ mrWriteState (RepCtx e mg) = do
     _ -> return False
   eUp <- logEffect e
   if gUp || eUp
-     then mrBroadcast
+     then mrCoord
      else return ()
 
 logEffect :: (MCS g) => GEffect g -> MRepT g Bool
@@ -108,16 +105,50 @@ logEffect e = do
   rid <- view hrId
   v <- fst . getThread rid <$> use hrDag
   hrDag %= event rid e
-  hrSendQueue %= (++ [(v,e)])
-  return $ True
+  g <- use hrCoord
+  mrBroadcast $ BNewEffect v e g
+  return True
 
-mrBroadcast :: (MCS g) => MRepT g ()
-mrBroadcast = do
+mrCoord :: (MCS g) => MRepT g ()
+mrCoord = do
+  rid <- view hrId
+  v <- fst . getThread rid <$> use hrDag
+  g <- use hrCoord
+  mrBroadcast $ BCoord v g
+
+mrUnicast :: (MCS g) => RId -> BMsg' g -> MRepT g ()
+mrUnicast i msg = do
+  rid <- view hrId
+  send <- view hrSend
+  liftIO $ send rid i msg
+
+mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
+mrBroadcast msg = do
   rid <- view hrId
   others <- view hrOtherIds
-  g <- use hrCoord
-  efq <- use hrSendQueue
-  hrSendQueue .= []
+  -- g <- use hrCoord
+  -- (v,e) <- use hrSendQueue
+  -- hrSendQueue .= (v,idE)
   send <- view hrSend
-  let msg = BCast (ESeq efq) g
+  -- let msg = BCast (ESeq efq) g
   liftIO $ mapM_ (\i -> send rid i msg) others
+
+handleMsg :: (MCS g) => TBM' g -> MRepT g ()
+handleMsg (i,msg) = do
+  rid <- view hrId
+  case msg of
+    BNewEffect v e g -> do
+      dag <- use hrDag
+      case event' rid (v,e) dag of
+        Just dag' -> undefined
+
+mrRequestComplete :: (MCS g) => RId -> MRepT g ()
+mrRequestComplete i = do
+  rid <- view hrId
+  mrUnicast i BRequest
+
+mrAwaitScript :: (MCS g) => ScriptT g IO a -> MRepT g a
+mrAwaitScript = undefined
+
+mrAwaitScript' :: (MCS g) => Int -> ScriptT g IO a -> MRepT g (Maybe a)
+mrAwaitScript' = undefined

@@ -71,8 +71,8 @@ event i d (VThread m) = VThread $ Map.alter
   i
   m
 
-{-| Add a new event, with designated clock, to a thread.  Return 'Nothing' if the event's causal
-  closure is not available. -}
+{-| Add a new event, with designated clock, to a thread.  Return
+  'Nothing' if the event's causal closure is not available. -}
 event' :: (Ord i) => i -> (VClock i, d) -> VThread i d -> Maybe (VThread i d)
 event' i (v,d) (VThread m) = undefined
 
