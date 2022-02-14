@@ -180,6 +180,11 @@ fromIncC a = IntC a mempty
 addAny :: IntC
 addAny = fromIncC incInfC
 
+{-| Cap allowing all additions and no subtractions.  This is a synonym
+  for 'addAny'. -}
+lowerBoundC :: IntC
+lowerBoundC = addAny
+
 subC :: Int -> IntC
 subC 0 = mempty
 subC n = IntC mempty (decC n)
@@ -190,6 +195,11 @@ fromDecC a | a == mempty = mempty
 
 subAny :: IntC
 subAny = fromDecC decInfC
+
+{-| Cap allowing all subtractions and no additions.  This is a synonym
+  for 'subAny'. -}
+upperBoundC :: IntC
+upperBoundC = subAny
 
 instance Semigroup IntC where
   IntC a1 s1 <> IntC a2 s2 = IntC (a1 <> a2) (s1 <> s2)

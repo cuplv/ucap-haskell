@@ -220,14 +220,25 @@ tescrow = testGroup "Escrow" $
        (loopPD >> lift (stateD "A"))
      @?= Identity 105
   ,testCase "Escrow accept" $
-     let e = initEscrow ["A"] [] 
+     let e = initEscrow ["A"] []
                (Map.fromList [("A",102), ("B",3), ("C",2)])
      in escrowOwned "B" . escrowAccept "B" <$> escrowTransfer "A" ("B",70) e
         @?= Right 73
   ,testCase "Escrow accept 2" $
-     let e1 = initEscrow ["A"] [] 
+     let e1 = initEscrow ["A"] []
                 (Map.fromList [("A",102), ("B",3), ("C",2)])
-         e2 = initEscrow ["A"] [] 
+         e2 = initEscrow ["A"] []
                 (Map.fromList [("A",32), ("B",73), ("C",2)])
      in escrowAccept "B" e1 @?= e1
+  ,testCase "Escrow read" $
+     let g = IntEscrow
+           { addEscrow = IncEscrow mempty
+           , subEscrow = DecEscrow . IncEscrow $ 
+               initEscrow [] [] (Map.fromList [("A",subA),("B",subB)])
+           }
+         subA = 8
+         subB = 46
+         s0 = 4
+     in evalDemo ["A","B"] g s0 (noBlock $ "A" .// lowerBound)
+        @?= Identity (Right $ s0 - subB)
   ]
