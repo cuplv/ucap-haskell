@@ -6,6 +6,8 @@ module Data.SRQueue
   , srEnqueueAll
   , srDequeue
   , srDequeueAll
+  , srPeek
+  , srPeekAll
   , srLength
   , SECell
   , seInit
@@ -41,8 +43,8 @@ instance (Ord a) => Semigroup (SRQueue a) where
     let fr [] as2 = as2
         fr as1 [] = as1
         fr (a1:as1) (a2:as2) | a1 == a2 = a1 : fr as1 as2
-                             | a1 > a2 = a1 : fr as1 (a2:as2)
-                             | a1 < a2 = a2 : fr (a1:as1) as2
+                             | a1 < a2 = a1 : fr as1 (a2:as2)
+                             | a1 > a2 = a2 : fr (a1:as1) as2
         g' = max g1 g2
     in SRQueue g' $ fr (drop (g' - g1) as1) (drop (g' - g2) as2)
 
@@ -62,7 +64,13 @@ srEnqueue :: a -> SRQueue a -> SRQueue a
 srEnqueue a = srEnqueueAll [a]
 
 srEnqueueAll :: [a] -> SRQueue a -> SRQueue a
-srEnqueueAll as1 (SRQueue g as2) = SRQueue g (as1 ++ as2)
+srEnqueueAll as' (SRQueue g as) = SRQueue g (as ++ as')
+
+srPeek :: SRQueue a -> Maybe a
+srPeek q = snd <$> srDequeue q
+
+srPeekAll :: SRQueue a -> [a]
+srPeekAll q = snd $ srDequeueAll q
 
 {-| Pop the next element from the queue (if it exists).  This must not
   be performed concurrently with other 'srDequeue' or 'srDequeueAll'
