@@ -17,6 +17,10 @@ testQueue = testGroup "SRQueue"
   ,testCase "dequeue 2" $
      (snd <$> (srDequeue . srEnqueue 4 . srEnqueue 8) srEmpty)
      @?= Just 8
+  ,testCase "peek" $
+     (srPeek . srEnqueue 4 . srEnqueue 8 $ srEmpty) @?= Just 8
+  ,testCase "peekAll" $
+     (srPeekAll . srEnqueue 4 . srEnqueue 8 $ srEmpty) @?= [8,4]
   ,testCase "dequeueAll" $
      (snd . srDequeueAll . srEnqueueAll [1,2,3,4] $ srEmpty)
      @?= [1,2,3,4]
@@ -32,6 +36,25 @@ testQueue = testGroup "SRQueue"
          q2 = srEnqueue 1 q0
      in (snd . srDequeueAll $ q1 <> q2)
         @?= [4,1,3,4,3]
+  ,testCase "Concurrent enqueue 3" $
+     let q0 = srInit [8,4]
+         q1 = fst . fromJust . srDequeue . srEnqueueAll [3,4,3] $ q0
+         q2 = srEnqueue 1 q0
+         q3 = fst . srDequeueAll $ q2 <> q1
+         q4 = srEnqueue 56 q3
+         q5 = srEnqueue 638 q3
+     in (snd . srDequeueAll $ q5 <> q4)
+        @?= [56,638]
+  ,testCase "Concurrent enqueue 4" $
+     let q = srInit [1,2]
+         q3 = srEnqueueAll [3,0,5] q
+         q4 = srEnqueue 4 q
+     in srPeekAll (q3 <> q4) @?= [1,2,3,0,4,5]
+  ,testCase "Concurrent enqueue 5" $
+     let q = srInit [1,2]
+         q3 = srEnqueueAll [3,0,5] q
+         q4 = srEnqueue 4 q
+     in srPeekAll (q4 <> q3) @?= [1,2,3,0,4,5]
   ]
 
 testCell = testGroup "SECell"

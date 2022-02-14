@@ -1,5 +1,6 @@
 module Data.SRQueue
-  ( SRQueue
+  ( -- * Single-reader queue
+    SRQueue
   , srEmpty
   , srInit
   , srEnqueue
@@ -9,6 +10,7 @@ module Data.SRQueue
   , srPeek
   , srPeekAll
   , srLength
+    -- * Single-editor cell
   , SECell
   , seInit
   , seSet
@@ -25,8 +27,8 @@ module Data.SRQueue
 let q = 'srInit' [1,2]
     q3 = 'srEnqueueAll' [3,0,5] q
     q4 = 'srEnqueue' 4 q
-in  'srDequeueAll' (q3 '<>' q4) == [1,2,3,0,4,5]
-    '&&' 'srDequeueAll' (q4 '<>' q3) == [1,2,3,0,4,5]
+in  'srPeekAll' (q3 '<>' q4) == [1,2,3,0,4,5]
+    '&&' 'srPeekAll' (q4 '<>' q3) == [1,2,3,0,4,5]
 @
 
   The order of concurrent elements is determined by their 'Ord'
@@ -55,20 +57,40 @@ instance (Ord a) => Monoid (SRQueue a) where
 srEmpty :: SRQueue a
 srEmpty = srInit []
 
-{-| An 'SRQueue' containing only the given elements. -}
+{-| An 'SRQueue' containing only the given elements.
+
+@
+'srPeek' ('srInit' [1,2,3]) '==' 'Just' 1
+@
+-}
 srInit :: [a] -> SRQueue a
 srInit as = SRQueue 0 as
 
-{-| Add an element to the queue.  This is safe to perform concurrently with other 'srEnqueue' changes. -}
+{-| Add an element to the queue.  This is safe to perform concurrently
+  with other 'srEnqueue' and 'srEnqueueAll' changes. -}
 srEnqueue :: a -> SRQueue a -> SRQueue a
 srEnqueue a = srEnqueueAll [a]
 
+{-| Enqueue a list of elements.  This is safe to perform concurrently
+  with other 'srEnqueue' and 'srEnqueueAll' changes.
+
+@
+('srEnqueue' 2 . 'srEnqueue' 1 $ q) '==' 'srEnqueueAll' [1,2] q
+@
+-}
 srEnqueueAll :: [a] -> SRQueue a -> SRQueue a
 srEnqueueAll as' (SRQueue g as) = SRQueue g (as ++ as')
 
+{-| Get the first element, if available. -}
 srPeek :: SRQueue a -> Maybe a
 srPeek q = snd <$> srDequeue q
 
+{-| Get all the elements.
+
+@
+('srPeekAll' . 'srEnqueue' 2 . 'srEnqueue' 1 $ 'srEmpty') '==' [1,2]
+@
+-}
 srPeekAll :: SRQueue a -> [a]
 srPeekAll q = snd $ srDequeueAll q
 
@@ -89,6 +111,9 @@ srDequeueAll (SRQueue g as) = (SRQueue (g + length as) [], as)
 srLength :: SRQueue a -> Int
 srLength (SRQueue _ as) = length as
 
+{-| An 'SECell' is a versioned record.  As long as new versions are not
+  created concurrently, two related 'SECell's will merge to the newest
+  version. -}
 data SECell a
   = SECell Int a
   deriving (Show,Eq,Ord)
@@ -104,17 +129,28 @@ seInit :: a -> SECell a
 seInit = SECell 0
 
 {-| Set a new cell value.  This must not be concurrent to any other
-  'seSet' or 'seMod'.  If the new value is the same as the old, the
-  'SECell' is not changed and will still be '==' to the old 'SECell'.
+  'seSet' or 'seMod'.
 
 @
-seInit a == seSet a (seInit a)
+'seGet' ('seInit' b) '==' 'seGet' ('seSet' b $ 'seInit' a)
+@
+
+If the new value is the same as the old, the 'SECell' is not changed
+and will still be '==' to the old 'SECell'.
+
+@
+'seInit' a '==' 'seSet' a ('seInit' a)
 @
 -}
 seSet :: (Eq a) => a -> SECell a -> SECell a
 seSet a s@(SECell g a0) | a /= a0 = SECell (g + 1) a
                         | otherwise = s
 
+{-|
+@
+'seGet' ('seInit' 3) '==' 3
+@
+-}
 seGet :: SECell a -> a
 seGet (SECell _ a) = a
 
