@@ -44,7 +44,7 @@ instance (Ord a) => Semigroup (SRQueue a) where
                              | a1 > a2 = a1 : fr as1 (a2:as2)
                              | a1 < a2 = a2 : fr (a1:as1) as2
         g' = max g1 g2
-    in SRQueue g' $ fr (drop g' as1) (drop g' as2)
+    in SRQueue g' $ fr (drop (g' - g1) as1) (drop (g' - g2) as2)
 
 instance (Ord a) => Monoid (SRQueue a) where
   mempty = srEmpty

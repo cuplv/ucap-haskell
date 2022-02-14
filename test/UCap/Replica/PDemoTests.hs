@@ -210,6 +210,15 @@ tescrow = testGroup "Escrow" $
        0
        (loopPD >> lift (stateD "A"))
      @?= Identity 107
+  ,testCase "Escrow 2" $
+     evalPDemo
+       (Map.fromList [("A",esc1)
+                     ,("B",esc2)
+                     ])
+       escSys1
+       0
+       (loopPD >> lift (stateD "A"))
+     @?= Identity 105
   ,testCase "Escrow accept" $
      let e = initEscrow ["A"] [] 
                (Map.fromList [("A",102), ("B",3), ("C",2)])

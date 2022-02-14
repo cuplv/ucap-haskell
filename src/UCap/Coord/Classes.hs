@@ -333,16 +333,10 @@ escrowHandleReqs
 escrowHandleReqs i p =
   case srDequeue (p ^. acct i . epaRequests) of
     Just (rs',EscrowIntRequest i2 amt) ->
-      case escrowTransfer i (i2,amt) p of
-        Right p1 ->
-          let p2 = p1 & acct i . epaRequests .~ rs'
-          in case escrowHandleReqs i p2 of
-               Just p3 -> Just p3
-               Nothing -> Just p2
-        -- Right p' -> case escrowHandleReqs i (p' & acct i . epaRequests .~ rs') of
-        --               Just p'' -> Just p''
-        --               Nothing -> Just p'
-        Left _ -> Nothing
+      let p1 = p & acct i . epaRequests .~ rs'
+      in case escrowTransfer i (i2,amt) p1 of
+           Right p2 -> Just p2
+           Left _ -> Nothing
     Nothing -> Nothing
 
 escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
