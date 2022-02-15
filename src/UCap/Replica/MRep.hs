@@ -139,8 +139,8 @@ handleMsg (i,msg) = do
   case msg of
     BNewEffect v e g -> do
       dag <- use hrDag
-      case event' rid (v,e) dag of
-        Just dag' -> undefined
+      case eventImport rid (v,e) dag of
+        Right dag' -> undefined
 
 mrRequestComplete :: (MCS g) => RId -> MRepT g ()
 mrRequestComplete i = do

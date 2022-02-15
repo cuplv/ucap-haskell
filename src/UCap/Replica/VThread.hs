@@ -3,7 +3,28 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module UCap.Replica.VThread where
+module UCap.Replica.VThread
+  ( VThread
+  , Event
+  , EventId
+  , initThreads
+    -- * Modification
+  , event
+  , eventImport
+  , EventImportError (..)
+  , observe
+  , mergeThread
+  , reduceToVis
+    -- * Serialize
+  , serialize
+  , serialize'
+  , simpleIdOrder
+    -- * Query
+  , getClock
+  , getThread
+  , lookupEvent
+  , precedesE
+  ) where
 
 import UCap.Replica.Types
 import UCap.Replica.VClock
@@ -13,6 +34,7 @@ import Data.Aeson
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Map.Merge.Lazy
 import Data.Maybe (fromJust)
 import GHC.Generics
 
@@ -54,6 +76,8 @@ mfirst (a : _) = Just a
 initThreads :: VThread i d
 initThreads = VThread Map.empty
 
+{-| @'precedesE' t e1 e2@ checks whether the event with ID @e1@ is in
+  the causal closure of the event with ID @e2@. -}
 precedesE :: (Ord i) => VThread i d -> EventId i -> EventId i -> Bool
 precedesE t i1 i2 = case (lookupEvent i1 t, lookupEvent i2 t) of
   (Just (v1,_), Just (v2,_)) ->
@@ -71,17 +95,54 @@ event i d (VThread m) = VThread $ Map.alter
   i
   m
 
-{-| Add a new event, with designated clock, to a thread.  Return
-  'Nothing' if the event's causal closure is not available. -}
-event' :: (Ord i) => i -> (VClock i, d) -> VThread i d -> Maybe (VThread i d)
-event' i (v,d) (VThread m) = undefined
+{-| Error cases for 'eventImport'. -}
+data EventImportError d
+  = PayloadConflict d d
+  | NotCausal
+  | IncompleteClock
+  deriving (Show,Eq,Ord)
+
+{-| Add a new event, with designated clock, to a thread.  There are
+  several error conditions.
+
+  @('PayloadConflict' d1 d2)@ indicates that an event with the same ID
+  already existed and had payload @d2@, which is not equal to the
+  received event's payload @d1@.
+
+  'NotCausal' indicates that the event's clock includes events which are not yet included in the dag.
+
+  'IncompleteClock' means that the event's clock precedes the header
+  clock for that process in the dag.
+-}
+eventImport
+  :: (Ord i, Eq d)
+  => i
+  -> (VClock i, d)
+  -> VThread i d
+  -> Either (EventImportError d) (VThread i d)
+eventImport i (v,d) t@(VThread m)
+  | v == getClock i t = Right $ event i d t
+  | v `precedes` getClock i t =
+    case lookupEvent (clockToId i v) t of
+      Just (_,d1) | d1 == d -> Right t
+                  | otherwise -> Left $ PayloadConflict d d1
+      Nothing -> Left IncompleteClock
+  | otherwise = Left NotCausal
+
+clockToId :: (Ord i) => i -> VClock i -> EventId i
+clockToId i v = case lookupVC i v of
+                  Just n -> (i, n + 1)
+                  Nothing -> (i, 0)
 
 {-| Get an event referred to by an 'EventId' (or 'Nothing' if the event
   does not exist. -}
 lookupEvent :: (Ord i) => EventId i -> VThread i d -> Maybe (Event i d)
 lookupEvent (i,n) (VThread m) = case Map.lookup i m of
-  Just (_,es) | length es >= n -> Just $ es !! n
+  Just (_,es) | length es > n -> Just $ es !! n
   _ -> Nothing
+
+getClock :: (Ord i) => i -> VThread i d -> VClock i
+getClock i t = fst $ getThread i t
 
 {-| Get the observed-clock and event list for a given process ID.  If a
   process "does not exist" in the sense that it has never made an
@@ -172,3 +233,20 @@ simpleIdOrder :: (Ord i) => EventId i -> EventId i -> Ordering
 simpleIdOrder (i1,n1) (i2,n2) = case compare n1 n2 of
                                   EQ -> compare i1 i2
                                   o -> o
+
+{-| Merge two 'VThread's.  This produces @'Left' i@ if header clocks
+  indicate that process @i@ has diverged in the two versions. -}
+mergeThread
+  :: (Ord i)
+  => VThread i d
+  -> VThread i d
+  -> Either i (VThread i d)
+mergeThread (VThread m1) (VThread m2) = VThread <$> mergeA
+  preserveMissing
+  preserveMissing
+  (zipWithAMatched $ \i a1 a2 -> case (a1,a2) of
+     ((v1,_),(v2,_)) | v2 `precedes` v1 || v1 == v2 -> Right a1
+     ((v1,_),(v2,_)) | v1 `precedes` v2 -> Right a2
+     _ -> Left i)
+  m1
+  m2

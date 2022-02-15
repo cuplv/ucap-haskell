@@ -8,6 +8,7 @@ module UCap.Replica.VClock
   , concurrent
   , lookupVC
   , joinVC
+  , leVC
   , changed
   , activeProcesses
   , toList
