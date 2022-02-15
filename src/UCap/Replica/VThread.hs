@@ -12,6 +12,7 @@ module UCap.Replica.VThread
   , event
   , eventImport
   , EventImportError (..)
+  , updateClock
   , observe
   , mergeThread
   , reduceToVis
@@ -20,6 +21,7 @@ module UCap.Replica.VThread
   , serialize'
   , simpleIdOrder
     -- * Query
+  , totalClock
   , getClock
   , getThread
   , lookupEvent
@@ -141,6 +143,7 @@ lookupEvent (i,n) (VThread m) = case Map.lookup i m of
   Just (_,es) | length es > n -> Just $ es !! n
   _ -> Nothing
 
+{-| Get a single process's clock. -}
 getClock :: (Ord i) => i -> VThread i d -> VClock i
 getClock i t = fst $ getThread i t
 
@@ -250,3 +253,27 @@ mergeThread (VThread m1) (VThread m2) = VThread <$> mergeA
      _ -> Left i)
   m1
   m2
+
+{-| Update a process's clock.  If the given clock precedes or is equal
+  to the existing clock, 'Nothing' is returned.  If the given clock
+  diverges from the existing clock, a runtime error arises. -}
+updateClock :: (Ord i) => i -> VClock i -> VThread i d -> Maybe (VThread i d)
+updateClock i v t | not (v `leVC` totalClock t) =
+  error "updateClock: missing events"
+updateClock i v (VThread m) =
+  let m' = Map.alter
+             (\a -> case a of
+                      Just (v1,es) | v1 `precedes` v -> Just (v,es)
+                                   | v `leVC` v1 -> Just (v1,es)
+                                   | otherwise -> error $ 
+                                       "updateClock: unrelated clock values"
+                      Nothing | v /= zeroClock -> Just (v,[])
+                              | otherwise -> Nothing)
+            i m
+  in if getClock i (VThread m) /= getClock i (VThread m')
+        then Just (VThread m')
+        else Nothing
+
+{-| Get the clock witnessing all existing events. -}
+totalClock :: (Ord i) => VThread i d -> VClock i
+totalClock (VThread m) = Map.foldl' (\vt (v,_) -> vt `joinVC` v) zeroClock m

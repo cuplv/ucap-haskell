@@ -4,6 +4,7 @@ module UCap.Replica.VClock
   ( VClock
   , zeroClock
   , tick
+  , tickBy
   , precedes
   , concurrent
   , lookupVC
@@ -69,6 +70,19 @@ tick :: (Ord i) => i -> VClock i -> VClock i
 tick i (VClock m) = VClock $ Map.alter f i m
   where f (Just n) = Just (n + 1)
         f Nothing = Just 0
+
+{- | Advance the clock for the given process ID, by the given number of
+   steps.
+
+@
+tickBy 2 "a" ≡ tick "a" . tick "a"
+@
+ -}
+tickBy :: (Ord i) => Int -> i -> VClock i -> VClock i
+tickBy 0 _ v = v
+tickBy n1 i (VClock m) | n1 > 0 = VClock $ Map.alter f i m
+  where f (Just n) = Just (n + n1)
+        f Nothing = Just (n1 - 1)
 
 leVC :: (Ord i) => VClock i -> VClock i -> Bool
 leVC v1@(VClock m1) v2 = and . map f $ Map.keys m1

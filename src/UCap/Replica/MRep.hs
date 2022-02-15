@@ -133,14 +133,20 @@ mrBroadcast msg = do
   -- let msg = BCast (ESeq efq) g
   liftIO $ mapM_ (\i -> send rid i msg) others
 
-handleMsg :: (MCS g) => TBM' g -> MRepT g ()
+handleMsg :: (MCS g) => TBM' g -> MRepT g Bool
 handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
       dag <- use hrDag
       case eventImport rid (v,e) dag of
-        Right dag' -> undefined
+        Right dag' -> hrDag .= dag' >> return True
+        Left NotCausal -> mrRequestComplete i >> return False
+        Left _ -> error $ "Failed to import from " ++ show i
+    BHello v -> undefined
+    BCoord v g -> undefined
+    BComplete dag1 g -> undefined
+    BRequest -> undefined
 
 mrRequestComplete :: (MCS g) => RId -> MRepT g ()
 mrRequestComplete i = do

@@ -22,4 +22,6 @@ testVClock = testGroup "VClock"
      tick "f" zc `concurrent` tick "h" zc @?= True
   ,testCase "tick3" $
      tick "f" zc == tick "h" zc @?= False
+  ,testCase "tickBy" $
+     tickBy 2 "a" zc @?= (tick "a" . tick "a" $ zc)
   ]
