@@ -4,7 +4,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module UCap.Replica.Http where
+module UCap.Replica.Http
+  ( HttpCS
+  , mkSender
+  , mkListener
+  ) where
 
 import UCap.Coord
 import UCap.Replica.MRep
@@ -74,3 +78,11 @@ sendMsg man addrs src dst msg = do
 mkListener :: (HttpCS g) => Int -> TChan (TBM' g) -> IO ()
 mkListener port chan = do
   runSettings (setPort port $ defaultSettings) (msgGetter chan)
+
+mkSender
+  :: (HttpCS g)
+  => Map RId (String,Int)
+  -> IO (RId -> RId -> BMsg' g -> IO ())
+mkSender addrs = do
+  man <- Client.newManager Client.defaultManagerSettings
+  return $ sendMsg man addrs

@@ -10,6 +10,8 @@ import UCap.Domain.Int
 import Control.Applicative (liftA2)
 import Data.Aeson
 import Data.Bifunctor
+import Data.Map (Map)
+import qualified Data.Map as Map
 import GHC.Generics
 
 data IncEscrow i
@@ -113,3 +115,12 @@ instance (Ord i) => CoordSys (IntEscrow i) where
     l2j . failToEither $ WhenFail IntEscrow (,)
       <<*>> (eitherToWF a . j2l $ acceptGrants i a)
       <<*>> (eitherToWF s . j2l $ acceptGrants i s)
+
+initIntEscrow :: (Ord i) => [i] -> Map i (Int,Int) -> IntEscrow i
+initIntEscrow sources m = IntEscrow
+  { addEscrow = IncEscrow $
+                initEscrow sources [] (Map.map snd m)
+  , subEscrow = DecEscrow . IncEscrow $
+                initEscrow sources [] (Map.map fst m)
+  }
+  

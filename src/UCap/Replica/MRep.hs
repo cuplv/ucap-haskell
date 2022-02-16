@@ -66,11 +66,11 @@ data MRepState g e s
 makeLenses ''MRepState
 
 data MRepInfo g e
-  = MRep { _hrId :: RId
-         , _hrOtherIds :: [RId]
-         , _hrSend :: RId -> RId -> BMsg g e -> IO ()
-         , _hrInbox :: TChan (TBM g e)
-         }
+  = MRepInfo { _hrId :: RId
+             , _hrOtherIds :: [RId]
+             , _hrSend :: RId -> RId -> BMsg g e -> IO ()
+             , _hrInbox :: TChan (TBM g e)
+             }
 
 makeLenses ''MRepInfo
 

@@ -185,10 +185,28 @@ misc = testGroup "Misc" $
   ]
 
 escSys1 :: IntEscrow String
-escSys1 = IntEscrow
-  { addEscrow = IncEscrow $ initEscrow ["A"] [] (Map.fromList [("A",102), ("B",3), ("C",2)])
-  , subEscrow = DecEscrow $ IncEscrow $ mempty
-  }
+escSys1 = initIntEscrow ["A"] $ Map.fromList
+  [("A",(0,102))
+  ,("B",(0,3))
+  ,("C",(0,2))
+  ]
+-- escSys1 = IntEscrow
+--   { addEscrow = IncEscrow $ initEscrow ["A"] [] (Map.fromList [("A",102), ("B",3), ("C",2)])
+--   , subEscrow = DecEscrow $ IncEscrow $ mempty
+--   }
+
+escSys2 :: IntEscrow String
+escSys2 = initIntEscrow ["A"] $ Map.fromList
+  [("A",(0,102))
+  ,("B",(0,3))
+  ,("C",(0,0))
+  ]
+
+escSys3 :: IntEscrow String
+escSys3 = initIntEscrow ["A"] $ Map.fromList
+  [("A",(0,102))
+  ,("B",(0,3))
+  ]
 
 esc1 :: ScriptT (IntEscrow String) Identity ()
 esc1 = loopBlock grantRequests'
@@ -199,7 +217,7 @@ esc2 = do
   loopBlock grantRequests'
 
 tescrow = testGroup "Escrow" $
-  [testCase "Escrow 1" $
+  [testCase "Escrow 1.1" $
      -- Replicas B and C should be able to use all of A's resources,
      -- but no more, in their transactions before they get stuck.
      evalPDemo
@@ -211,6 +229,30 @@ tescrow = testGroup "Escrow" $
        0
        (loopPD >> lift (stateD "A"))
      @?= Identity 107
+  ,testCase "Escrow 1.2" $
+     -- Replicas B and C should be able to use all of A's resources,
+     -- but no more, in their transactions before they get stuck.
+     evalPDemo
+       (Map.fromList [("A",esc1)
+                     ,("B",esc2)
+                     ,("C",esc2)
+                     ])
+       escSys2
+       0
+       (loopPD >> lift (stateD "A"))
+     @?= Identity 105
+  ,testCase "Escrow 1.3" $
+     -- Replicas B and C should be able to use all of A's resources,
+     -- but no more, in their transactions before they get stuck.
+     evalPDemo
+       (Map.fromList [("A",esc1)
+                     ,("B",esc2)
+                     ,("C",esc2)
+                     ])
+       escSys3
+       0
+       (loopPD >> lift (stateD "A"))
+     @?= Identity 105
   ,testCase "Escrow 2" $
      evalPDemo
        (Map.fromList [("A",esc1)

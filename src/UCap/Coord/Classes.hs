@@ -275,7 +275,8 @@ initEscrow :: [i] -> [i] -> Map i Int -> EscrowIntPool i
 initEscrow sources sinks amounts =
   EscrowIntPool { _epSinks = sinks
                 , _epSources = sources
-                , _epAccounts = Map.map initAccount amounts
+                , _epAccounts = Map.map initAccount
+                                        (Map.filter (/= 0) amounts)
                 }
 
 escrowOwned :: (Ord i) => i -> EscrowIntPool i -> Int
