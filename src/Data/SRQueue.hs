@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Data.SRQueue
   ( -- * Single-reader queue
     SRQueue
@@ -17,6 +19,9 @@ module Data.SRQueue
   , seGet
   , seMod
   ) where
+
+import Data.Aeson
+import GHC.Generics
 
 {-| An 'SRQueue' is a queue of elements that can be safely added-to in a
   concurrent way.  This means that two added-to queues can be derived
@@ -38,7 +43,10 @@ data SRQueue a
   = SRQueue { lqConsumed :: Int
             , lqElements :: [a]
             }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON a) => ToJSON (SRQueue a)
+instance (FromJSON a) => FromJSON (SRQueue a)
 
 instance (Ord a) => Semigroup (SRQueue a) where
   SRQueue g1 as1 <> SRQueue g2 as2 =
@@ -116,7 +124,10 @@ srLength (SRQueue _ as) = length as
   version. -}
 data SECell a
   = SECell Int a
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON a) => ToJSON (SECell a)
+instance (FromJSON a) => FromJSON (SECell a)
 
 instance (Eq a) => Semigroup (SECell a) where
   SECell g1 a1 <> SECell g2 a2

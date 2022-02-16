@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -6,7 +7,9 @@
 
 module UCap.Coord.Classes where
 
+import Data.Aeson
 import Data.SRQueue
+import GHC.Generics
 import UCap.Domain.Classes
 import UCap.Lens
 
@@ -219,16 +222,22 @@ data EscrowIntRequest i
   = EscrowIntRequest { _eprAsker :: i
                      , _eprAmount :: Int
                      }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON i) => ToJSON (EscrowIntRequest i)
+instance (FromJSON i) => FromJSON (EscrowIntRequest i)
 
 data EscrowIntAccount i
   = EscrowIntAccount { _epaOwned :: SECell Int
                      , _epaInbox :: SRQueue Int
                      , _epaRequests :: SRQueue (EscrowIntRequest i)
                      }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
 
 makeLenses ''EscrowIntAccount
+
+instance (ToJSON i) => ToJSON (EscrowIntAccount i)
+instance (FromJSON i) => FromJSON (EscrowIntAccount i)
 
 initAccount :: Int -> EscrowIntAccount i
 initAccount n = EscrowIntAccount (seInit n) srEmpty srEmpty
@@ -245,9 +254,12 @@ data EscrowIntPool i
                   , _epSinks :: [i]
                   , _epSources :: [i]
                   }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
 
 makeLenses ''EscrowIntPool
+
+instance (ToJSON i, ToJSONKey i) => ToJSON (EscrowIntPool i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (EscrowIntPool i)
 
 acct :: (Ord i) => i -> Lens' (EscrowIntPool i) (EscrowIntAccount i)
 acct i = epAccounts . at i . non mempty

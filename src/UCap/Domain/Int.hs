@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module UCap.Domain.Int where
@@ -5,13 +6,19 @@ module UCap.Domain.Int where
 import Data.InfNum
 import UCap.Domain.Classes
 
+import Data.Aeson
+import GHC.Generics
+
 class IntOffset a where
   intOffset :: a -> Int
 
 class (Cap c) => MaxEffect c where
   maxEffect :: c -> Maybe (CEffect c)
 
-newtype IncE = IncE Int deriving (Show,Eq,Ord)
+newtype IncE = IncE Int deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON IncE
+instance FromJSON IncE
 
 instance Semigroup IncE where
   IncE n1 <> IncE n2 = IncE (n1 + n2)
@@ -34,7 +41,10 @@ incE :: Int -> IncE
 incE n | n >= 0 = IncE n
        | otherwise = error "Int arg must be >= 0."
 
-newtype DecE = DecE IncE deriving (Show,Eq,Ord)
+newtype DecE = DecE IncE deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON DecE
+instance FromJSON DecE
 
 instance Semigroup DecE where
   DecE a <> DecE b = DecE (a <> b)
@@ -56,7 +66,10 @@ instance EffectDom DecE where
 decE :: Int -> DecE
 decE = DecE . incE
 
-data IntE = AddE IncE | SubE DecE deriving (Show)
+data IntE = AddE IncE | SubE DecE deriving (Show,Generic)
+
+instance ToJSON IntE
+instance FromJSON IntE
 
 instance Eq IntE where
   a == b = intOffset a == intOffset b
@@ -95,7 +108,10 @@ invertIntE :: IntE -> IntE
 invertIntE (AddE e) = SubE (DecE e)
 invertIntE (SubE (DecE e)) = AddE e
 
-newtype IncC = IncC (AddBound Int) deriving (Show,Eq,Ord)
+newtype IncC = IncC (AddBound Int) deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON IncC
+instance FromJSON IncC
 
 incC :: Int -> IncC
 incC n | n >= 0 = IncC . addB $ n
@@ -130,7 +146,10 @@ instance Cap IncC where
 instance MaxEffect IncC where
   maxEffect (IncC a) = incE <$> addFun a
 
-newtype DecC = DecC { unwrapDecC :: IncC } deriving (Show,Eq,Ord)
+newtype DecC = DecC { unwrapDecC :: IncC } deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON DecC
+instance FromJSON DecC
 
 decC :: Int -> DecC
 decC = DecC . incC
@@ -165,7 +184,10 @@ data IntC
   = IntC { addBnd :: IncC
          , subBnd :: DecC
          }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON IntC
+instance FromJSON IntC
 
 intC :: Int -> IntC
 intC n | n >= 0 = addC n

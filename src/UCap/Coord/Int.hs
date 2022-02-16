@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module UCap.Coord.Int where
@@ -7,11 +8,16 @@ import UCap.Domain.Classes
 import UCap.Domain.Int
 
 import Control.Applicative (liftA2)
+import Data.Aeson
 import Data.Bifunctor
+import GHC.Generics
 
 data IncEscrow i
   = IncEscrow (EscrowIntPool i)
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IncEscrow i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IncEscrow i)
 
 instance (Ord i) => Semigroup (IncEscrow i) where
   IncEscrow a <> IncEscrow b = IncEscrow (a <> b)
@@ -46,7 +52,10 @@ instance (Ord i) => CoordSys (IncEscrow i) where
 
 data DecEscrow i
   = DecEscrow (IncEscrow i)
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (DecEscrow i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (DecEscrow i)
 
 instance (Ord i) => Semigroup (DecEscrow i) where
   DecEscrow a <> DecEscrow b = DecEscrow (a <> b)
@@ -67,7 +76,10 @@ data IntEscrow i
   = IntEscrow { addEscrow :: IncEscrow i
               , subEscrow :: DecEscrow i
               }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IntEscrow i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IntEscrow i)
 
 instance (Ord i) => Semigroup (IntEscrow i) where
   IntEscrow a1 s1 <> IntEscrow a2 s2 = IntEscrow (a1 <> a2) (s1 <> s2)
