@@ -279,6 +279,9 @@ initEscrow sources sinks amounts =
                                         (Map.filter (/= 0) amounts)
                 }
 
+escrowOwners :: EscrowIntPool i -> [i]
+escrowOwners p = Map.keys $ p ^. epAccounts
+
 escrowOwned :: (Ord i) => i -> EscrowIntPool i -> Int
 escrowOwned i p = seGet $ p ^. epAccounts . at i . non mempty . epaOwned
 
@@ -286,7 +289,7 @@ escrowUnowned :: (Ord i) => i -> EscrowIntPool i -> Int
 escrowUnowned i p = escrowTotal p - escrowOwned i p
 
 escrowTotal :: (Ord i) => EscrowIntPool i -> Int
-escrowTotal p = sum $ map (\i -> escrowOwned i p) (Map.keys (p^.epAccounts))
+escrowTotal p = sum $ map (\i -> escrowOwned i $ escrowAccept i p) (Map.keys (p^.epAccounts))
 
 escrowUse
   :: (Ord i)

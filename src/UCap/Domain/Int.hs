@@ -66,7 +66,11 @@ instance EffectDom DecE where
 decE :: Int -> DecE
 decE = DecE . incE
 
-data IntE = AddE IncE | SubE DecE deriving (Show,Generic)
+data IntE = AddE IncE | SubE DecE deriving (Generic)
+
+instance Show IntE where
+  show (AddE (IncE n)) = "(++" ++ show n ++ ")"
+  show (SubE (DecE (IncE n))) = "(--" ++ show n ++ ")"
 
 instance ToJSON IntE
 instance FromJSON IntE
@@ -184,7 +188,11 @@ data IntC
   = IntC { addBnd :: IncC
          , subBnd :: DecC
          }
-  deriving (Show,Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic)
+
+instance Show IntC where
+  show (IntC (IncC a) (DecC (IncC s))) =
+    "{-" ++ show s ++ ", +" ++ show a ++ "}"
 
 instance ToJSON IntC
 instance FromJSON IntC

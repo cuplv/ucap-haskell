@@ -26,7 +26,10 @@ import GHC.Generics
 {- | A vector clock using process ID type @i@. -}
 data VClock i
   = VClock (Map i Int)
-  deriving (Show,Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic)
+
+instance (Show i) => Show (VClock i) where
+  show (VClock m) = "Clock(" ++ show (Map.toList m) ++ ")"
 
 instance (ToJSON i, ToJSONKey i) => ToJSON (VClock i)
 instance (ToJSON i, ToJSONKey i) => ToJSONKey (VClock i)

@@ -267,6 +267,14 @@ tescrow = testGroup "Escrow" $
                (Map.fromList [("A",102), ("B",3), ("C",2)])
      in escrowOwned "B" . escrowAccept "B" <$> escrowTransfer "A" ("B",70) e
         @?= Right 73
+  ,testCase "Escrow unowned" $
+     let e = initEscrow [] [] $ Map.fromList [("A",60), ("B",3), ("C", 1)]
+     in escrowUnowned "B" <$> escrowTransfer "A" ("B",20) e
+        @?= Right 61
+  ,testCase "Escrow unowned 2" $
+     let e = initEscrow [] [] $ Map.fromList [("A",60), ("B",3), ("C", 1)]
+     in escrowUnowned "C" <$> escrowTransfer "A" ("B",20) e
+        @?= Right 63
   ,testCase "Escrow accept 2" $
      let e1 = initEscrow ["A"] []
                 (Map.fromList [("A",102), ("B",3), ("C",2)])
