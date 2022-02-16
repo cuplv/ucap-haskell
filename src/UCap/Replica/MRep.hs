@@ -4,8 +4,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module UCap.Replica.MRep where
+module UCap.Replica.MRep
+  ( RId
+  , MCS
+  , BMsg
+  , BMsg'
+  , TBM
+  , TBM'
+  , MRepInfo (..)
+  , evalMRepScript
+  ) where
 
 import Lang.Rwa
 import Lang.Rwa.Interpret
@@ -14,7 +24,7 @@ import UCap.Domain
 import UCap.Lens
 import UCap.Replica
 
-import Control.Concurrent.STM.TChan
+import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans (liftIO)
@@ -24,9 +34,11 @@ import GHC.Generics
 type RId = String
 
 class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g) => MCS g
+instance (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g) => MCS g
 
 data BMsg g e
-  = BHello VC
+  = BPing VC
+  | BPong VC
   | BNewEffect VC e g
   | BCoord VC g
   | BComplete (VThread String e) g
@@ -49,7 +61,6 @@ data MRepState g e s
               , _hrCurrentState :: s
               , _hrCoord :: g
               , _hrDag :: VThread RId e
-              , _hrInbox :: TChan (TBM g e)
               }
 
 makeLenses ''MRepState
@@ -58,12 +69,37 @@ data MRepInfo g e
   = MRep { _hrId :: RId
          , _hrOtherIds :: [RId]
          , _hrSend :: RId -> RId -> BMsg g e -> IO ()
+         , _hrInbox :: TChan (TBM g e)
          }
 
 makeLenses ''MRepInfo
 
 type MRepT g = StateT (MRepState g (GEffect g) (GState g))
                       (ReaderT (MRepInfo g (GEffect g)) IO)
+
+runMRep
+  :: (MCS g)
+  => MRepT g a
+  -> MRepState g (GEffect g) (GState g)
+  -> MRepInfo g (GEffect g)
+  -> IO (a, MRepState g (GEffect g) (GState g))
+runMRep m s r = runReaderT (runStateT m s) r
+
+evalMRepScript
+  :: (MCS g)
+  => ScriptT g IO a
+  -> GState g
+  -> g
+  -> MRepInfo g (GEffect g)
+  -> IO a
+evalMRepScript sc s0 g0 info =
+  let st = MRepState { _hrInitState = s0
+                     , _hrCurrentState = s0
+                     , _hrCoord = g0
+                     , _hrDag = initThreads
+                     }
+  in fst <$> runMRep (mrAwaitScript sc) st info
+
 
 mrScript :: (MCS g) => ScriptT g IO a -> MRepT g (Either (ScriptB g IO a) a)
 mrScript sc = do
@@ -134,7 +170,12 @@ handleMsg (i,msg) = do
         Right () -> return True
         Left NotCausal -> mrRequestComplete i >> return False
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
-    BHello v -> do
+    BPing v -> do
+      b <- hrDag `maybeModifying` updateClock i v
+      v1 <- getClock rid <$> use hrDag
+      mrUnicast i $ BPong v1
+      return b
+    BPong v -> do
       hrDag `maybeModifying` updateClock i v
     BCoord v g -> hrCoord <>= g >> return True
     BComplete dag1 g -> 
@@ -154,7 +195,25 @@ mrRequestComplete i = do
   mrUnicast i BRequest
 
 mrAwaitScript :: (MCS g) => ScriptT g IO a -> MRepT g a
-mrAwaitScript = undefined
+mrAwaitScript sc = mrScript sc >>= \case
+  Right a -> return a
+  Left b -> mrTryAwait b >>= \case
+    Just sc' -> mrCheckChange >> mrAwaitScript sc'
+    Nothing -> mrWaitChange >> mrAwaitScript (await b)
 
-mrAwaitScript' :: (MCS g) => Int -> ScriptT g IO a -> MRepT g (Maybe a)
-mrAwaitScript' = undefined
+mrCheckChange :: (MCS g) => MRepT g ()
+mrCheckChange = do
+  chan <- view hrInbox
+  m <- liftIO . atomically $ tryReadTChan chan
+  case m of
+    Just msg -> handleMsg msg >> return ()
+    Nothing -> return ()
+
+mrWaitChange :: (MCS g) => MRepT g ()
+mrWaitChange = do
+  chan <- view hrInbox
+  msg <- liftIO . atomically $ readTChan chan
+  r <- handleMsg msg
+  case r of
+    True -> return ()
+    False -> mrWaitChange
