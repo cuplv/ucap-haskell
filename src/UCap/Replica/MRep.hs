@@ -123,30 +123,30 @@ mrUnicast i msg = do
   liftIO $ send rid i msg
 
 mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
-mrBroadcast msg = do
-  rid <- view hrId
-  others <- view hrOtherIds
-  -- g <- use hrCoord
-  -- (v,e) <- use hrSendQueue
-  -- hrSendQueue .= (v,idE)
-  send <- view hrSend
-  -- let msg = BCast (ESeq efq) g
-  liftIO $ mapM_ (\i -> send rid i msg) others
+mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< view hrOtherIds
 
 handleMsg :: (MCS g) => TBM' g -> MRepT g Bool
 handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
-      dag <- use hrDag
-      case eventImport rid (v,e) dag of
-        Right dag' -> hrDag .= dag' >> return True
+      hrDag `eitherModifying` eventImport rid (v,e) >>= \case
+        Right () -> return True
         Left NotCausal -> mrRequestComplete i >> return False
-        Left _ -> error $ "Failed to import from " ++ show i
-    BHello v -> undefined
-    BCoord v g -> undefined
-    BComplete dag1 g -> undefined
-    BRequest -> undefined
+        Left IncompleteClock -> error $ "Failed to import from" ++ show i
+    BHello v -> do
+      hrDag `maybeModifying` updateClock i v
+    BCoord v g -> hrCoord <>= g >> return True
+    BComplete dag1 g -> 
+      hrDag `eitherModifying` mergeThread dag1 >>= \case
+        Right () -> return True
+        Left i2 -> error $ "BComplete error, cannot merge on " 
+                           ++ show i2
+    BRequest -> do
+      dag <- use hrDag
+      g <- use hrCoord
+      mrUnicast i $ BComplete dag g
+      return False
 
 mrRequestComplete :: (MCS g) => RId -> MRepT g ()
 mrRequestComplete i = do

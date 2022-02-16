@@ -3,6 +3,7 @@
 module UCap.Lens
   ( module Lens.Micro.Platform
   , (/\~)
+  , (<>=)
   , meetTo
   , plusTo
   , nani
@@ -10,10 +11,13 @@ module UCap.Lens
   , nonList
   , nonMap
   , nonCheat
+  , maybeModifying
+  , eitherModifying
   ) where
 
 import UCap.Domain.Classes (Meet (..), BMeet (..))
 
+import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -56,3 +60,30 @@ nonMap = nonNull
   accesses a 'Nothing' value, it throws a runtime error. -}
 nonCheat :: Lens' (Maybe a) a
 nonCheat = nani (error "nonCheat got Nothing") (const False)
+
+{-| Modify state by applying a partial function to a part of the state.
+  If the function returns 'Nothing', the state is not modified.  The
+  return value indicates whether a modification took place. -}
+maybeModifying :: MonadState s m => Lens' s a -> (a -> Maybe a) -> m Bool
+maybeModifying l f = do
+  a1 <- use l
+  case f a1 of
+    Just a2 -> l .= a2 >> return True
+    Nothing -> return False
+
+{-| Like 'maybeModifying' but for 'Either'.  If a 'Left' value is
+  produced, it is returned.  Otherwise, a 'Right' result indicates
+  that the modification took place. -}
+eitherModifying
+  :: MonadState s m
+  => Lens' s a
+  -> (a -> Either e a)
+  -> m (Either e ())
+eitherModifying l f = do
+  a1 <- use l
+  case f a1 of
+    Right a2 -> l .= a2 >> return (Right ())
+    Left e -> return (Left e)
+
+(<>=) :: (MonadState s m, Semigroup a) => ASetter s s a a -> a -> m ()
+l <>= a = l %= (<> a)
