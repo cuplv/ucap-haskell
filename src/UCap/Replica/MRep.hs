@@ -149,7 +149,11 @@ logEffect :: (MCS g) => GEffect g -> MRepT g Bool
 logEffect e | e == idE = return False
 logEffect e = do
   rid <- view hrId
-  v <- fst . getThread rid <$> use hrDag
+  vz <- fst . getThread rid <$> use hrDag
+  v <- mrGetClock
+  if v /= vz
+     then error $ "Clocks dont' match: " ++ show v ++ " vs. " ++ show vz
+     else return ()
   hrDag %= event rid e
   updateStateVal
   g <- use hrCoord
@@ -175,26 +179,32 @@ mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< view hrOtherIds
 mrPing :: (MCS g) => MRepT g ()
 mrPing = do
   rid <- view hrId
-  v <- getClock rid <$> use hrDag
+  v <- mrGetClock
   mrBroadcast $ BPing v
+
+mrGetClock :: (MCS g) => MRepT g VC
+mrGetClock = totalClock <$> use hrDag
 
 handleMsg :: (MCS g) => TBM' g -> MRepT g Bool
 handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
-      hrDag `eitherModifying` eventImport rid (v,e) >>= \case
+      hrDag `eitherModifying` (\d -> observe rid i <$> eventImport i (v,e) d) >>= \case
         Right () -> updateStateVal >> return True
         Left NotCausal -> mrRequestComplete i >> return False
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
       b <- hrDag `maybeModifying` updateClock i v
-      v1 <- getClock rid <$> use hrDag
+      v1 <- mrGetClock
       mrUnicast i $ BPong v1
       return b
     BPong v -> do
       hrDag `maybeModifying` updateClock i v
-    BCoord v g -> hrCoord <>= g >> return True
+    BCoord v g -> do
+      hrDag `maybeModifying` updateClock i v
+      hrCoord <>= g
+      return True
     BComplete dag1 g -> 
       hrDag `eitherModifying` mergeThread dag1 >>= \case
         Right () -> updateStateVal >> return True
