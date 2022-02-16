@@ -130,7 +130,9 @@ grantRequests' = do
   rid <- lift getReplicaId
   g <- view rsCoord <$> checkState
   case grantRequests rid g of
-    Just g' -> nonBlock $ setCoord g'
+    Just _ -> nonBlock $ do
+      g' <- fromJust . grantRequests rid . view rsCoord <$> readState
+      setCoord g'
     Nothing -> notReady
 
 acceptGrants' :: (CoordSys g, Monad m) => ScriptB g m ()

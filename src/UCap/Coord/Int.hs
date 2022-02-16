@@ -79,16 +79,16 @@ data IntEscrow i
   = IntEscrow { addEscrow :: IncEscrow i
               , subEscrow :: DecEscrow i
               }
-  deriving (Eq,Ord,Generic)
+  deriving (Show,Eq,Ord,Generic)
 
 instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IntEscrow i)
 instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IntEscrow i)
 
-instance (Ord i, Show i) => Show (IntEscrow i) where
-  show e@(IntEscrow (IncEscrow a) (DecEscrow (IncEscrow s))) =
-    let ks = nub $ escrowOwners a ++ escrowOwners s
-        caps = map (\k -> (k,capsWrite $ localCaps k e)) ks
-    in show caps
+-- instance (Ord i, Show i) => Show (IntEscrow i) where
+--   show e@(IntEscrow (IncEscrow a) (DecEscrow (IncEscrow s))) =
+--     let ks = nub $ escrowOwners a ++ escrowOwners s
+--         caps = map (\k -> (k,capsWrite $ localCaps k e)) ks
+--     in show caps
 
 instance (Ord i) => Semigroup (IntEscrow i) where
   IntEscrow a1 s1 <> IntEscrow a2 s2 = IntEscrow (a1 <> a2) (s1 <> s2)

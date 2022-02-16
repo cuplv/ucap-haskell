@@ -229,7 +229,7 @@ instance (FromJSON i) => FromJSON (EscrowIntRequest i)
 
 data EscrowIntAccount i
   = EscrowIntAccount { _epaOwned :: SECell Int
-                     , _epaInbox :: SRQueue Int
+                     , _epaInbox :: SRQueue (i,Int)
                      , _epaRequests :: SRQueue (EscrowIntRequest i)
                      }
   deriving (Show,Eq,Ord,Generic)
@@ -339,7 +339,7 @@ escrowTransfer
   -> Either Int (EscrowIntPool i)
 escrowTransfer i (i2,amt) p = do
   p' <- escrowUse i amt p
-  return $ p' & acct i2 . epaInbox %~ srEnqueue amt
+  return $ p' & acct i2 . epaInbox %~ srEnqueue (i,amt)
 
 escrowHandleReqs
   :: (Ord i)
@@ -359,4 +359,4 @@ escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
 escrowAccept i p =
   let (inbox',amts) = srDequeueAll $ p ^. acct i . epaInbox
   in p & acct i . epaInbox .~ inbox'
-       & acct i . epaOwned %~ seMod (+ sum amts)
+       & acct i . epaOwned %~ seMod (+ sum (snd <$> amts))

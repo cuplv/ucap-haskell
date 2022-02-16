@@ -31,21 +31,32 @@ alphaId = "alpha"
 alphaPort = 8090
 betaId = "beta"
 betaPort = 8091
+gammaId = "gamma"
+gammaPort = 8092
 
 localhost = "127.0.0.1"
 
 addrMap = Map.fromList
   [(alphaId, (localhost,alphaPort))
   ,(betaId, (localhost,betaPort))
+  ,(gammaId, (localhost,gammaPort))
   ]
 
-type G = IntEscrow RId
-
-initState = 50
-
-initCoord = initIntEscrow [alphaId] $ Map.fromList
-  [(alphaId, (50,0))
-  ]
+escrowDemo :: IO ()
+escrowDemo = do
+  let sets = HRSettings
+        { _hsAddrs = addrMap
+        , _hsInitState = 52
+        , _hsInitCoord = initIntEscrow [alphaId] $ Map.fromList
+            [(alphaId, (52,0))
+            ]
+        }
+      scripts = Map.fromList $
+        [(alphaId, loopBlock grantRequests')
+        ,(betaId, transactMany_ (replicate 20 $ subOp 1))
+        ,(gammaId, transactMany_ (replicate 10 $ subOp 3))
+        ]
+  runDemo sets scripts
 
 debugLoop :: TChan String -> Map RId (TMVar ()) -> IO ()
 debugLoop dbg allDone = do
@@ -64,34 +75,23 @@ runDemo sets scripts = do
   dbg <- newTChanIO :: IO (TChan String)
   let ids = Map.keys scripts
   allDone <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
-  -- let info rid inbox = do
-  --       let debug s = atomically $ writeTChan dbg $
-  --             "=> " ++ rid ++ ": " ++ s ++ "\n"
-  --       send <- mkSender (sets ^. hsInitCoord) debug (sets ^. hsAddrs)
-  --       return $ MRepInfo
-  --         { _hrId = rid
-  --         , _hrAddrs = sets ^. hsAddrs
-  --         , _hrSend = send
-  --         , _hrInbox = inbox
-  --         , _hrDebug = debug
-  --         }
   let runRep rid = do
         let sc = fromJust $ Map.lookup rid scripts
         let debug s = atomically . writeTChan dbg $ 
-              "=> " ++ rid ++ ": " ++ s ++ "\n"
+              "=>  " ++ rid ++ ": " ++ s ++ "\n"
         demoRep debug rid sets sc
   let forkFin rid = do
         let mv = fromJust $ Map.lookup rid allDone
         forkFinally 
-          (runRep rid)
+          (do atomically . writeTChan dbg $ 
+                "[*] " ++ rid ++ " initialized, with state "
+                ++ show (sets ^. hsInitState)
+              runRep rid)
           (\(Right (a,s)) -> atomically $ do
              writeTChan dbg $ "[+] " ++ rid ++ " returned " ++ show a
                               ++ ", with state " ++ show s
              putTMVar mv ())
   mapM_ forkFin ids
-  -- dt <- forkIO $ dbPrint dbg
-  -- a <- forkIO $ demoAlpha dbg
-  -- forkFinally (demoBeta dbg) (\_ -> atomically $ putTMVar betaDone ())
   debugLoop dbg allDone
 
 demoRep
@@ -118,45 +118,3 @@ demoRep debug rid sets sc = do
   a <- evalMRepScript' sc (sets^.hsInitState) (sets^.hsInitCoord) info
   killThread tid
   return a
-
--- demoAlpha :: TChan String -> IO ()
--- demoAlpha dchan = do
---   let debug s = atomically $ writeTChan dchan ("=> " ++ alphaId ++ ": " ++ s ++ "\n")
---   send <- mkSender debug addrMap
---   inbox <- newTChanIO :: IO (TChan (TBM' G))
---   tid <- forkIO $ mkListener alphaPort inbox debug
---   let info = MRepInfo
---         { _hrId = alphaId
---         , _hrOtherIds = [betaId]
---         , _hrSend = send
---         , _hrInbox = inbox
---         , _hrDebug = debug
---         }
---       sc = loopBlock $ do
---              s <- checkState
---              lift . liftIO $ debug $ "state is " ++ show (s^.rsStore)
---              grantRequests'
---   evalMRepScript sc initState initCoord info
---   killThread tid
-
--- demoBeta :: TChan String -> IO ()
--- demoBeta dchan = do
---   let debug s = atomically $ writeTChan dchan ("=> " ++ betaId ++ ": " ++ s ++ "\n")
---   send <- mkSender debug addrMap
---   inbox <- newTChanIO :: IO (TChan (TBM' G))
---   tid <- forkIO $ mkListener betaPort inbox debug
---   let info = MRepInfo
---         { _hrId = betaId
---         , _hrOtherIds = [alphaId]
---         , _hrSend = send
---         , _hrInbox = inbox
---         , _hrDebug = debug
---         }
---       sc = do
---         s0 <- view rsStore <$> readState
---         liftScript $ debug $ "init with state " ++ show s0
---         transactMany_ (replicate 300 $ subOp 1)
---         s1 <- view rsStore <$> readState
---         liftScript $ debug $ "finished with state " ++ show s1
---   evalMRepScript sc initState initCoord info
---   killThread tid

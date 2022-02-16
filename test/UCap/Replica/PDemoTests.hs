@@ -292,4 +292,33 @@ tescrow = testGroup "Escrow" $
          s0 = 4
      in evalDemo ["A","B"] g s0 (noBlock $ "A" .// lowerBound)
         @?= Identity (Right $ s0 - subB)
+  ,testCase "Escrow concurrent requests" $
+     let g0 = initEscrow ["A"] [] $ Map.fromList
+                [("A",52)
+                ]
+         g1 = escrowRequest "B" ("A",1) g0
+         g2 = escrowRequest "C" ("A",3) g0
+         g' = escrowAccept "B" . escrowAccept "C" $
+                fromJust . escrowHandleReqs "A" $
+                  fromJust . escrowHandleReqs "A" $ (g1 <> g2)
+     in (escrowOwned "B" g', escrowOwned "C" g') @?= (1,3)
+  ,testCase "Escrow concurrent requests 2" $
+     let g0 = initEscrow ["A"] [] $ Map.fromList
+                [("A",52)
+                ]
+         g1 = escrowRequest "B" ("A",1) g0
+         g2 = escrowRequest "C" ("A",3) g0
+         g' = escrowAccept "B" . escrowAccept "C" $
+                fromJust . escrowHandleReqs "A" $
+                  fromJust . escrowHandleReqs "A" $ (g2 <> g1)
+     in (escrowOwned "B" g', escrowOwned "C" g') @?= (1,3)
+  ,testCase "Escrow concurrent requests 3" $
+     let g0 = initEscrow ["A"] [] $ Map.fromList
+                [("A",52)
+                ]
+         g1 = escrowRequest "B" ("A",1) g0
+         g2 = fromJust . escrowHandleReqs "A" $ escrowRequest "C" ("A",3) g0
+         g' = escrowAccept "B" $
+                fromJust . escrowHandleReqs "A" $ (g2 <> g1)
+     in (escrowOwned "B" g') @?= 1
   ]

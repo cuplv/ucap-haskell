@@ -38,8 +38,8 @@ import GHC.Generics
 
 type RId = String
 
-class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g) => MCS g
-instance (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g) => MCS g
+class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
+instance (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
 
 data BMsg g e
   = BPing VC
@@ -84,6 +84,11 @@ makeLenses ''MRepInfo
 
 type MRepT g = StateT (MRepState g (GEffect g) (GState g))
                       (ReaderT (MRepInfo g (GEffect g)) IO)
+
+mrDebug :: String -> MRepT g ()
+mrDebug s = do
+  f <- view hrDebug
+  liftIO $ f s
 
 mrOtherIds :: MRepT g [RId]
 mrOtherIds = do
@@ -221,6 +226,7 @@ handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
+      mrDebug $ "Handle BNewEffect from " ++ show i
       hrDag `eitherModifying` (\d -> observe rid i <$> eventImport i (v,e) d) >>= \case
         Right () -> updateStateVal >> return True
         Left NotCausal -> mrRequestComplete i >> return False
@@ -233,15 +239,20 @@ handleMsg (i,msg) = do
     BPong v -> do
       hrDag `maybeModifying` updateClock i v
     BCoord v g -> do
+      mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
       hrDag `maybeModifying` updateClock i v
       hrCoord <>= g
+      g' <- use hrCoord
+      mrDebug $ "Updated to " ++ show g'
       return True
-    BComplete dag1 g -> 
+    BComplete dag1 g -> do
+      mrDebug $ "Handle BComplete from " ++ show i
       hrDag `eitherModifying` mergeThread dag1 >>= \case
         Right () -> updateStateVal >> return True
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do
+      mrDebug $ "Handle BRequest from " ++ show i
       dag <- use hrDag
       g <- use hrCoord
       mrUnicast i $ BComplete dag g
