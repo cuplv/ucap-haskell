@@ -9,7 +9,7 @@
 module UCap.Replica.MRep
   ( RId
   , MCS
-  , BMsg
+  , BMsg (..)
   , BMsg'
   , TBM
   , TBM'
@@ -70,6 +70,7 @@ data MRepInfo g e
              , _hrOtherIds :: [RId]
              , _hrSend :: RId -> RId -> BMsg g e -> IO ()
              , _hrInbox :: TChan (TBM g e)
+             , _hrDebug :: String -> IO ()
              }
 
 makeLenses ''MRepInfo
@@ -98,7 +99,9 @@ evalMRepScript sc s0 g0 info =
                      , _hrCoord = g0
                      , _hrDag = initThreads
                      }
-  in fst <$> runMRep (mrAwaitScript sc) st info
+      m = do mrPing
+             mrAwaitScript sc
+  in fst <$> runMRep m st info
 
 
 mrScript :: (MCS g) => ScriptT g IO a -> MRepT g (Either (ScriptB g IO a) a)
@@ -126,14 +129,21 @@ mrWriteState (RepCtx e mg) = do
   rid <- view hrId
   g0 <- use hrCoord
   gUp <- case mg of
-    Just g | g /= g0 -> do
+    Just g | g0 <> g /= g0 -> do
       hrCoord %= (<> g)
       return True
     _ -> return False
   eUp <- logEffect e
-  if gUp || eUp
+  if gUp && not eUp
      then mrCoord
      else return ()
+
+updateStateVal :: (MCS g) => MRepT g ()
+updateStateVal = do
+  s0 <- use hrInitState
+  dag <- use hrDag
+  let s' = eFun (mconcat . serialize $ dag) s0
+  hrCurrentState .= s'
 
 logEffect :: (MCS g) => GEffect g -> MRepT g Bool
 logEffect e | e == idE = return False
@@ -141,6 +151,7 @@ logEffect e = do
   rid <- view hrId
   v <- fst . getThread rid <$> use hrDag
   hrDag %= event rid e
+  updateStateVal
   g <- use hrCoord
   mrBroadcast $ BNewEffect v e g
   return True
@@ -161,13 +172,19 @@ mrUnicast i msg = do
 mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
 mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< view hrOtherIds
 
+mrPing :: (MCS g) => MRepT g ()
+mrPing = do
+  rid <- view hrId
+  v <- getClock rid <$> use hrDag
+  mrBroadcast $ BPing v
+
 handleMsg :: (MCS g) => TBM' g -> MRepT g Bool
 handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
       hrDag `eitherModifying` eventImport rid (v,e) >>= \case
-        Right () -> return True
+        Right () -> updateStateVal >> return True
         Left NotCausal -> mrRequestComplete i >> return False
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
@@ -180,7 +197,7 @@ handleMsg (i,msg) = do
     BCoord v g -> hrCoord <>= g >> return True
     BComplete dag1 g -> 
       hrDag `eitherModifying` mergeThread dag1 >>= \case
-        Right () -> return True
+        Right () -> updateStateVal >> return True
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do

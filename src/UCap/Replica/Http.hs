@@ -14,6 +14,7 @@ import UCap.Coord
 import UCap.Replica.MRep
 
 import Control.Concurrent.STM
+import qualified Control.Exception.Base as Exception
 import Data.Aeson
 import Data.Map
 import qualified Data.Map as Map
@@ -31,6 +32,9 @@ class
   , FromJSON g
   , FromJSON (GCap g)
   , FromJSON (GEffect g)
+  , Show g
+  , Show (GCap g)
+  , Show (GEffect g)
   ) => HttpCS g
 instance
   ( MCS g
@@ -40,16 +44,26 @@ instance
   , FromJSON g
   , FromJSON (GCap g)
   , FromJSON (GEffect g)
+  , Show g
+  , Show (GCap g)
+  , Show (GEffect g)
   ) => HttpCS g
 
 msgGetter
   :: (HttpCS g)
   => TChan (TBM' g)
+  -> (String -> IO ())
   -> Application
-msgGetter chan request respond = do
+msgGetter chan debug request respond = do
   body <- strictRequestBody request
   case decode body of
     Just tbm -> do
+      let src = fst tbm
+          msg = snd tbm
+      case msg of
+        BPing _ -> return ()
+        BPong _ -> return ()
+        _ -> debug $ "RECV(" ++ src ++ ") " ++ show msg
       atomically (writeTChan chan tbm)
       respond $ responseLBS status200 [] ""
     Nothing -> respond $ responseLBS status400 [] ""
@@ -57,14 +71,15 @@ msgGetter chan request respond = do
 sendMsg
   :: (HttpCS g)
   => Client.Manager
+  -> (String -> IO ()) -- ^ Debug
   -> Map RId (String,Int) -- ^ Addresses
   -> RId -- ^ Source replica
   -> RId -- ^ Destination replica
   -> BMsg' g
   -> IO ()
-sendMsg man addrs src dst msg = do
+sendMsg man debug addrs src dst msg = do
   addr <- case Map.lookup dst addrs of
-            Just (addr,port) -> return $ addr ++ ":" ++ show port
+            Just (addr,port) -> return $ "http://" ++ addr ++ ":" ++ show port ++ "/"
             Nothing -> error $ show dst ++ " has no network address"
   initialRequest <- Client.parseRequest addr
   let req = initialRequest 
@@ -72,17 +87,31 @@ sendMsg man addrs src dst msg = do
               , Client.requestBody =
                   Client.RequestBodyLBS $ encode (src,msg)
               }
-  response <- Client.httpLbs req man
+  case msg of
+    BPing _ -> return ()
+    BPong _ -> return ()
+    _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
+  Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
+    case e of
+      Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
+        debug $ "failed send to " ++ show dst ++ ", msg " ++ show msg
+      e -> error $ "unhandled http-client exception: " ++ show e
   return ()
 
-mkListener :: (HttpCS g) => Int -> TChan (TBM' g) -> IO ()
-mkListener port chan = do
-  runSettings (setPort port $ defaultSettings) (msgGetter chan)
+mkListener
+  :: (HttpCS g)
+  => Int
+  -> TChan (TBM' g)
+  -> (String -> IO ())
+  -> IO ()
+mkListener port chan debug = do
+  runSettings (setPort port $ defaultSettings) (msgGetter chan debug)
 
 mkSender
   :: (HttpCS g)
-  => Map RId (String,Int)
+  => (String -> IO ())
+  -> Map RId (String,Int)
   -> IO (RId -> RId -> BMsg' g -> IO ())
-mkSender addrs = do
+mkSender debug addrs = do
   man <- Client.newManager Client.defaultManagerSettings
-  return $ sendMsg man addrs
+  return $ sendMsg man debug addrs

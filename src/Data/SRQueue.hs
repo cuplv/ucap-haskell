@@ -43,7 +43,11 @@ data SRQueue a
   = SRQueue { lqConsumed :: Int
             , lqElements :: [a]
             }
-  deriving (Show,Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic)
+
+instance (Show a) => Show (SRQueue a) where
+  show (SRQueue 0 es) = "SRQueue(" ++ show es ++ ")"
+  show (SRQueue n es) = "SRQueue(" ++ show n ++ " + " ++ show es ++ ")"
 
 instance (ToJSON a) => ToJSON (SRQueue a)
 instance (FromJSON a) => FromJSON (SRQueue a)
@@ -124,7 +128,11 @@ srLength (SRQueue _ as) = length as
   version. -}
 data SECell a
   = SECell Int a
-  deriving (Show,Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic)
+
+instance (Show a) => Show (SECell a) where
+  show (SECell 0 a) = "SECell(" ++ show a ++ ")"
+  show (SECell n a) = "SECell(" ++ show n ++ " = " ++ show a ++ ")"
 
 instance (ToJSON a) => ToJSON (SECell a)
 instance (FromJSON a) => FromJSON (SECell a)
