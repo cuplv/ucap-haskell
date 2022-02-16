@@ -13,8 +13,10 @@ module UCap.Replica.MRep
   , BMsg'
   , TBM
   , TBM'
+  , Addrs (..)
   , MRepInfo (..)
   , evalMRepScript
+  , evalMRepScript'
   ) where
 
 import Lang.Rwa
@@ -29,6 +31,9 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans (liftIO)
 import Data.Aeson hiding ((.=))
+import Data.Map (Map)
+import qualified Data.Map as Map
+import qualified Data.List as List
 import GHC.Generics
 
 type RId = String
@@ -65,9 +70,11 @@ data MRepState g e s
 
 makeLenses ''MRepState
 
+type Addrs = Map RId (String,Int)
+
 data MRepInfo g e
   = MRepInfo { _hrId :: RId
-             , _hrOtherIds :: [RId]
+             , _hrAddrs :: Addrs
              , _hrSend :: RId -> RId -> BMsg g e -> IO ()
              , _hrInbox :: TChan (TBM g e)
              , _hrDebug :: String -> IO ()
@@ -77,6 +84,12 @@ makeLenses ''MRepInfo
 
 type MRepT g = StateT (MRepState g (GEffect g) (GState g))
                       (ReaderT (MRepInfo g (GEffect g)) IO)
+
+mrOtherIds :: MRepT g [RId]
+mrOtherIds = do
+  rid <- view hrId
+  ids <- Map.keys <$> view hrAddrs
+  return $ List.delete rid ids
 
 runMRep
   :: (MCS g)
@@ -102,6 +115,24 @@ evalMRepScript sc s0 g0 info =
       m = do mrPing
              mrAwaitScript sc
   in fst <$> runMRep m st info
+
+evalMRepScript'
+  :: (MCS g)
+  => ScriptT g IO a
+  -> GState g
+  -> g
+  -> MRepInfo g (GEffect g)
+  -> IO (a,GState g)
+evalMRepScript' sc s0 g0 info =
+  let st = MRepState { _hrInitState = s0
+                     , _hrCurrentState = s0
+                     , _hrCoord = g0
+                     , _hrDag = initThreads
+                     }
+      m = do mrPing
+             mrAwaitScript sc
+  in do (a,m) <- runMRep m st info
+        return (a, m ^. hrCurrentState)
 
 
 mrScript :: (MCS g) => ScriptT g IO a -> MRepT g (Either (ScriptB g IO a) a)
@@ -174,7 +205,7 @@ mrUnicast i msg = do
   liftIO $ send rid i msg
 
 mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
-mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< view hrOtherIds
+mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< mrOtherIds
 
 mrPing :: (MCS g) => MRepT g ()
 mrPing = do

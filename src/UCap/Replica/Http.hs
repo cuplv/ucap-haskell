@@ -35,6 +35,7 @@ class
   , Show g
   , Show (GCap g)
   , Show (GEffect g)
+  , Show (GState g)
   ) => HttpCS g
 instance
   ( MCS g
@@ -47,6 +48,7 @@ instance
   , Show g
   , Show (GCap g)
   , Show (GEffect g)
+  , Show (GState g)
   ) => HttpCS g
 
 msgGetter
