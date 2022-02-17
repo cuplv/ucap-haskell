@@ -13,6 +13,7 @@ module UCap.Replica.VThread
   , eventImport
   , EventImportError (..)
   , updateClock
+  , UpdateClockError (..)
   , observe
   , mergeThread
   , reduceToVis
@@ -254,10 +255,21 @@ mergeThread (VThread m1) (VThread m2) = VThread <$> mergeA
   m1
   m2
 
+data UpdateClockError
+  = MissingEvents
+  | OldValues
+
 {-| Update a process's clock.  If the given clock precedes or is equal
-  to the existing clock, 'Nothing' is returned.  If the given clock
-  diverges from the existing clock, a runtime error arises. -}
-updateClock :: (Ord i) => i -> VClock i -> VThread i d -> Maybe (VThread i d)
+  to the existing clock, @('Left' 'OldValues')@ is returned.  If the
+  clock refers to events that are not yet present, @('Left'
+  'MissingEvents')@ is returned.  If the given clock diverges from the
+  existing clock, a runtime error arises. -}
+updateClock
+  :: (Ord i)
+  => i
+  -> VClock i
+  -> VThread i d
+  -> Either UpdateClockError (VThread i d)
 updateClock i v t | not (v `leVC` totalClock t) =
   error "updateClock: missing events"
 updateClock i v (VThread m) =
@@ -271,8 +283,8 @@ updateClock i v (VThread m) =
                               | otherwise -> Nothing)
             i m
   in if getClock i (VThread m) /= getClock i (VThread m')
-        then Just (VThread m')
-        else Nothing
+        then Right (VThread m')
+        else Left OldValues
 
 {-| Get the clock witnessing all existing events. -}
 totalClock :: (Ord i) => VThread i d -> VClock i

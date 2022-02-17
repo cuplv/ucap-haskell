@@ -236,19 +236,25 @@ handleMsg (i,msg) = do
         Left NotCausal -> mrRequestComplete i >> return False
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
-      b <- hrDag `maybeModifying` updateClock i v
-      v1 <- mrGetClock
-      mrUnicast i $ BPong v1
-      return b
+      let pong = do v1 <- mrGetClock
+                    mrUnicast i $ BPong v1
+      hrDag `eitherModifying` updateClock i v >>= \case
+        Left MissingEvents -> mrRequestComplete i >> return False
+        Left OldValues -> pong >> return False
+        Right () -> pong >> return True
     BPong v -> do
-      hrDag `maybeModifying` updateClock i v
+      hrDag `eitherModifying` updateClock i v >>= \case
+        Left MissingEvents -> mrRequestComplete i >> return False
+        Left OldValues -> return False
+        Right () -> return True
     BCoord v g -> do
       mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
-      hrDag `maybeModifying` updateClock i v
-      hrCoord <>= g
-      g' <- use hrCoord
-      mrDebug $ "Updated to " ++ show g'
-      return True
+      hrDag `eitherModifying` updateClock i v >>= \case
+        Left MissingEvents -> mrRequestComplete i >> return False
+        _ -> do hrCoord <>= g
+                g' <- use hrCoord
+                mrDebug $ "Updated to " ++ show g'
+                return True
     BComplete dag1 g -> do
       mrDebug $ "Handle BComplete from " ++ show i
       hrDag `eitherModifying` mergeThread dag1 >>= \case
