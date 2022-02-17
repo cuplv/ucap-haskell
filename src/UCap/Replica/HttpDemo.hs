@@ -46,9 +46,9 @@ escrowDemo :: IO ()
 escrowDemo = do
   let sets = HRSettings
         { _hsAddrs = addrMap
-        , _hsInitState = 52
+        , _hsInitState = 50
         , _hsInitCoord = initIntEscrow [alphaId] $ Map.fromList
-            [(alphaId, (52,0))
+            [(alphaId, (50,0))
             ]
         }
       scripts = Map.fromList $
