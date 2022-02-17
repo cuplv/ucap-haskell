@@ -27,6 +27,7 @@ import UCap.Lens
 import UCap.Replica
 
 import Control.Concurrent.STM
+import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans (liftIO)
@@ -78,12 +79,15 @@ data MRepInfo g e
              , _hrSend :: RId -> RId -> BMsg g e -> IO ()
              , _hrInbox :: TChan (TBM g e)
              , _hrDebug :: String -> IO ()
+             , _hrShutdown :: TMVar ()
              }
 
 makeLenses ''MRepInfo
 
-type MRepT g = StateT (MRepState g (GEffect g) (GState g))
-                      (ReaderT (MRepInfo g (GEffect g)) IO)
+type MRepT g = 
+       ExceptT () 
+         (StateT (MRepState g (GEffect g) (GState g))
+            (ReaderT (MRepInfo g (GEffect g)) IO))
 
 mrDebug :: String -> MRepT g ()
 mrDebug s = do
@@ -101,8 +105,8 @@ runMRep
   => MRepT g a
   -> MRepState g (GEffect g) (GState g)
   -> MRepInfo g (GEffect g)
-  -> IO (a, MRepState g (GEffect g) (GState g))
-runMRep m s r = runReaderT (runStateT m s) r
+  -> IO (Either () a, MRepState g (GEffect g) (GState g))
+runMRep m s r = runReaderT (runStateT (runExceptT m) s) r
 
 evalMRepScript
   :: (MCS g)
@@ -110,7 +114,7 @@ evalMRepScript
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
-  -> IO a
+  -> IO (Either () a)
 evalMRepScript sc s0 g0 info =
   let st = MRepState { _hrInitState = s0
                      , _hrCurrentState = s0
@@ -127,7 +131,7 @@ evalMRepScript'
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
-  -> IO (a,GState g)
+  -> IO (Either () a,GState g)
 evalMRepScript' sc s0 g0 info =
   let st = MRepState { _hrInitState = s0
                      , _hrCurrentState = s0
@@ -281,8 +285,11 @@ mrCheckChange = do
 mrWaitChange :: (MCS g) => MRepT g ()
 mrWaitChange = do
   chan <- view hrInbox
-  msg <- liftIO . atomically $ readTChan chan
-  r <- handleMsg msg
-  case r of
-    True -> return ()
-    False -> mrWaitChange
+  sd <- view hrShutdown
+  let stm = (Right <$> readTChan chan) `orElse` (Left <$> takeTMVar sd)
+  cmd <- liftIO . atomically $ stm
+  case cmd of
+    Right msg -> handleMsg msg >>= \case
+      True -> return ()
+      False -> mrWaitChange
+    Left () -> throwError ()

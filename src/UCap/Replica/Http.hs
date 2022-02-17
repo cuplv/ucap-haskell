@@ -97,6 +97,9 @@ sendMsg man debug addrs src dst msg = do
     case e of
       Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
         debug $ "failed send to " ++ show dst ++ ", msg " ++ show msg
+      Client.HttpExceptionRequest _ (Client.InternalException _) ->
+        debug $ "internal exception on send to "
+                ++ show dst ++ ", msg " ++ show msg
       e -> error $ "unhandled http-client exception: " ++ show e
   return ()
 
