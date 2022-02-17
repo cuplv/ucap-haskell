@@ -26,6 +26,7 @@ testPDemo = testGroup "PDemo"
   [misc
   ,loops
   ,tqueues
+  ,ttoken
   ,tmany
   ,tescrow
   ]
@@ -64,6 +65,38 @@ abIU = mkTokenG beta
 
 abUU :: (Cap c) => UniversalG String c
 abUU = UniversalG
+
+ttoken = testGroup "TokenG operations" $
+  [testCase "Request" $
+     isRequestedOf alpha (requestToken beta (mkToken alpha))
+     @?= True
+  ,testCase "Request 2" $
+     isRequestedOf beta (requestToken beta (mkToken alpha))
+     @?= False
+  ,testCase "Request 3" $
+     isRequestedOf alpha <$> (grantToken alpha
+                              . requestToken beta $ mkToken alpha)
+     @?= Right False
+  ,testCase "Request 4" $
+     tokenOwner <$> (grantToken alpha
+                     . requestToken beta $ mkToken alpha)
+     @?= Right beta
+  ,testCase "Concurrent" $
+     let q1 = mkToken alpha
+         q2 = requestToken beta q1
+         q3 = grantToken alpha (q1 <> q2)
+     in tokenOwner <$> ((q1 <>) <$> q3) @?= Right beta
+  ,testCase "Concurrent 2" $
+     let q1 = mkToken alpha
+         q2 = requestToken beta q1
+         q3 = grantToken alpha (q1 <> q2)
+     in ((q1 <>) <$> q3) @?= q3
+  ,testCase "Concurrent 2" $
+     let q1 = mkToken alpha
+         q2 = requestToken beta q1
+         q3 = grantToken alpha (q1 <> q2)
+     in ((q2 <>) <$> q3) @?= q3
+  ]
 
 tqueues = testGroup "Transaction queues" $
   let act1 :: PDemo (UniversalG String IntC) (State [IntOp ()]) (Int,Int,Int)
@@ -158,12 +191,19 @@ tmany = testGroup "transactMany" $
                (0,[])
                (loopPD >> lift (stateD alpha))
      @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
+  ,testCase "Single transactor" $
+     evalPDemo (Map.fromList [(alpha,s1),(beta, loopBlock grantRequests')])
+               abIU
+               (0,[])
+               (loopPD >> lift (stateD alpha))
+     @?= Identity (0 + 1 + 2 + 3 + 4 + 5, [1,2,3,4,5])
   ,testCase "Two with locks" $
      evalPDemo (Map.fromList [(alpha,s1),(beta,s2)])
-               (abUI :: (TokenG String (IntC, ConstC (IdentityC [Int]) [Int])))
+               (abUI :: TokenG String (IntC, ConstC (IdentityC [Int]) [Int]))
                (0,[])
                (loopPD >> broadcast beta >> lift (stateD alpha))
-     @?= Identity (0 + 1 + 2 + 3 + 4 + 5 + 100 + 200 + 300 + 400 + 500, [1,2,3,4,5])
+     @?= Identity ( 0 + 1 + 2 + 3 + 4 + 5 + 100 + 200 + 300 + 400 + 500
+                  , [1,2,3,4,5] )
   ]
 
 type TestC = (IntC, ConstC (IdentityC [Int]) [Int])
@@ -190,10 +230,6 @@ escSys1 = initIntEscrow ["A"] $ Map.fromList
   ,("B",(0,3))
   ,("C",(0,2))
   ]
--- escSys1 = IntEscrow
---   { addEscrow = IncEscrow $ initEscrow ["A"] [] (Map.fromList [("A",102), ("B",3), ("C",2)])
---   , subEscrow = DecEscrow $ IncEscrow $ mempty
---   }
 
 escSys2 :: IntEscrow String
 escSys2 = initIntEscrow ["A"] $ Map.fromList
@@ -230,8 +266,6 @@ tescrow = testGroup "Escrow" $
        (loopPD >> lift (stateD "A"))
      @?= Identity 107
   ,testCase "Escrow 1.2" $
-     -- Replicas B and C should be able to use all of A's resources,
-     -- but no more, in their transactions before they get stuck.
      evalPDemo
        (Map.fromList [("A",esc1)
                      ,("B",esc2)
@@ -242,8 +276,6 @@ tescrow = testGroup "Escrow" $
        (loopPD >> lift (stateD "A"))
      @?= Identity 105
   ,testCase "Escrow 1.3" $
-     -- Replicas B and C should be able to use all of A's resources,
-     -- but no more, in their transactions before they get stuck.
      evalPDemo
        (Map.fromList [("A",esc1)
                      ,("B",esc2)

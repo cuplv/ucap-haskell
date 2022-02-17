@@ -1,8 +1,21 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Data.SRQueue
-  ( -- * Single-reader queue
-    SRQueue
+  ( -- * Multi-writer queue
+    MWQueue
+  , mwEmpty
+  , mwEnqueue
+  , mwEnqueueAll
+  , mwDequeue
+  , mwDequeueAll
+  , mwPeek
+  , mwPeekAll
+  , mwLength
+    -- * Single-reader queue
+  , SRQueue
   , srEmpty
   , srInit
   , srEnqueue
@@ -20,25 +33,15 @@ module Data.SRQueue
   , seMod
   ) where
 
+import UCap.Lens
+
 import Data.Aeson
+import qualified Data.List as List
+import Data.Map (Map)
+import qualified Data.Map as Map
 import GHC.Generics
 
-{-| An 'SRQueue' is a queue of elements that can be safely added-to in a
-  concurrent way.  This means that two added-to queues can be derived
-  from a common ancestor and then merged ('<>'), and no elements will
-  be lost or duplicated.
 
-@
-let q = 'srInit' [1,2]
-    q3 = 'srEnqueueAll' [3,0,5] q
-    q4 = 'srEnqueue' 4 q
-in  'srPeekAll' (q3 '<>' q4) == [1,2,3,0,4,5]
-    '&&' 'srPeekAll' (q4 '<>' q3) == [1,2,3,0,4,5]
-@
-
-  The order of concurrent elements is determined by their 'Ord'
-  instance.
--}
 data SRQueue a
   = SRQueue { lqConsumed :: Int
             , lqElements :: [a]
@@ -78,13 +81,11 @@ srEmpty = srInit []
 srInit :: [a] -> SRQueue a
 srInit as = SRQueue 0 as
 
-{-| Add an element to the queue.  This is safe to perform concurrently
-  with other 'srEnqueue' and 'srEnqueueAll' changes. -}
+{-| Add an element to the queue. -}
 srEnqueue :: a -> SRQueue a -> SRQueue a
 srEnqueue a = srEnqueueAll [a]
 
-{-| Enqueue a list of elements.  This is safe to perform concurrently
-  with other 'srEnqueue' and 'srEnqueueAll' changes.
+{-| Enqueue a list of elements.
 
 @
 ('srEnqueue' 2 . 'srEnqueue' 1 $ q) '==' 'srEnqueueAll' [1,2] q
@@ -122,6 +123,81 @@ srDequeueAll (SRQueue g as) = (SRQueue (g + length as) [], as)
 {-| Get the length of the queue. -}
 srLength :: SRQueue a -> Int
 srLength (SRQueue _ as) = length as
+
+srIsInitial :: SRQueue a -> Bool
+srIsInitial (SRQueue 0 []) = True
+srIsInitial _ = False
+
+{-| An 'MWQueue' is a queue of elements that can be safely added-to in a
+  concurrent way.  This means that two added-to queues can be derived
+  from a common ancestor and then merged ('<>'), and no elements will
+  be lost or duplicated.
+
+@
+let q = 'mwEmpty'
+    q3 = 'srEnqueueAll' i1 [3,0,5] q
+    q4 = 'srEnqueue' i2 4 q
+in  'srPeekAll' (q3 '<>' q4) == [1,2,3,0,4,5]
+    '&&' 'srPeekAll' (q4 '<>' q3) == [1,2,3,0,4,5]
+@
+
+  The order of concurrent elements is determined by their 'Ord'
+  instance.
+-}
+data MWQueue i a
+  = MWQueue { _mwQueue :: Map i (SRQueue a) }
+  deriving (Eq,Ord,Generic)
+
+makeLenses ''MWQueue
+
+instance (Ord i, Show a) => Show (MWQueue i a) where
+  show q = "MWQueue(" ++ show (mwPeekAll q) ++ ")"
+
+instance (ToJSON i, ToJSONKey i, ToJSON a) => ToJSON (MWQueue i a)
+instance (Ord i, FromJSON i, FromJSONKey i, FromJSON a) => FromJSON (MWQueue i a)
+
+instance (Ord i, Ord a) => Semigroup (MWQueue i a) where
+  MWQueue m1 <> MWQueue m2 = MWQueue $ Map.unionWith (<>) m1 m2
+
+mwEmpty :: MWQueue i a
+mwEmpty = MWQueue Map.empty
+
+srl :: (Ord i) => i -> Lens' (MWQueue i a) (SRQueue a)
+srl i = mwQueue . at i . nani srEmpty srIsInitial
+
+mwEnqueue :: (Ord i) => i -> a -> MWQueue i a -> MWQueue i a
+mwEnqueue i a = srl i %~ srEnqueue a
+
+mwEnqueueAll :: (Ord i) => i -> [a] -> MWQueue i a -> MWQueue i a
+mwEnqueueAll i as = srl i %~ srEnqueueAll as
+
+mwDequeue :: (Ord i) => MWQueue i a -> Maybe (MWQueue i a, a)
+mwDequeue q@(MWQueue m) =
+  let ks = Map.keys m
+      comp i1 i2 = 
+        case compare (srLength $ q ^. srl i2) (srLength $ q ^. srl i1) of
+          EQ -> compare i1 i2
+          o -> o
+  in case List.sortBy comp ks of
+       i : _ -> case srDequeue $ q ^. srl i of
+                  Just (iq',a) -> Just (q & srl i .~ iq', a)
+                  Nothing -> Nothing
+       [] -> Nothing
+
+mwDequeueAll :: (Ord i) => MWQueue i a -> (MWQueue i a, [a])
+mwDequeueAll q = case mwDequeue q of
+                   Just (q',a) -> (a :) <$> mwDequeueAll q'
+                   Nothing -> (q,[])
+
+mwPeek :: (Ord i) => MWQueue i a -> Maybe a
+mwPeek q = snd <$> mwDequeue q
+
+mwPeekAll :: (Ord i) => MWQueue i a -> [a]
+mwPeekAll q = snd $ mwDequeueAll q
+
+mwLength :: (Ord i) => MWQueue i a -> Int
+mwLength = length . mwPeekAll
+
 
 {-| An 'SECell' is a versioned record.  As long as new versions are not
   created concurrently, two related 'SECell's will merge to the newest

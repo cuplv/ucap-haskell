@@ -17,10 +17,49 @@ testQueue = testGroup "SRQueue"
   ,testCase "dequeue 2" $
      (snd <$> (srDequeue . srEnqueue 4 . srEnqueue 8) srEmpty)
      @?= Just 8
+  ,testCase "duplication" $
+     let q1 = mwEnqueue "a" 4 mwEmpty
+     in q1 <> q1 @?= q1
+  ,testCase "duplication 2" $
+     let q1 = mwEnqueue "a" 4 mwEmpty
+         q2 = mwEnqueue "a" 9 q1
+     in q1 <> q2 @?= q2
+  ,testCase "duplication 3" $
+     let q1 = mwEnqueue "a" 4 mwEmpty
+         q2 = fst . fromJust $ mwDequeue (mwEnqueue "a" 9 q1)
+     in q1 <> q2 @?= q2
+  ,testCase "length 1" $
+     let q1 = mwEmpty :: MWQueue String Int
+         q2 = mwEnqueue "a" 1 . mwEnqueue "b" 8 . mwEnqueue "a" 4 $ q1
+         q3 = fst $ mwDequeueAll q2
+     in (mwLength q1, mwLength q2, mwLength q3)
+        @?= (0,3,0)
+  ,testCase "merge 0" $
+     let q1 = srEnqueue "beta" srEmpty
+         q2 = fst <$> srDequeue q1
+     in (q1 <>) <$> q2 @?= q2
+  ,testCase "merge 1" $
+     let q2 = mwEnqueue "beta" "beta" mwEmpty
+         q3 = fst <$> mwDequeue q2
+     in (q2 <>) <$> q3 @?= q3
   ,testCase "peek" $
      (srPeek . srEnqueue 4 . srEnqueue 8 $ srEmpty) @?= Just 8
+  ,testCase "peek mw 1" $
+     (mwPeek . fst . fromJust . mwDequeue . mwEnqueue "a" 8 $ mwEmpty)
+     @?= Nothing
+  ,testCase "peek mw 2" $
+     (mwPeek . fst . fromJust . mwDequeue . mwEnqueueAll "a" [8,1] $ mwEmpty)
+     @?= Just 1
+  ,testCase "dequeueAll mw" $
+     (snd . mwDequeueAll
+      . mwEnqueueAll "a" [1,2,3,4]
+      . mwEnqueueAll "b" [8,9]
+      $ mwEmpty)
+     @?= [1,2,3,8,4,9]
   ,testCase "peekAll" $
      (srPeekAll . srEnqueue 4 . srEnqueue 8 $ srEmpty) @?= [8,4]
+  ,testCase "peekAll mw" $
+     (mwPeekAll . mwEnqueue "b" 4 . mwEnqueue "a" 8 $ mwEmpty) @?= [8,4]
   ,testCase "dequeueAll" $
      (snd . srDequeueAll . srEnqueueAll [1,2,3,4] $ srEmpty)
      @?= [1,2,3,4]
@@ -56,17 +95,17 @@ testQueue = testGroup "SRQueue"
          q4 = srEnqueue 4 q
      in srPeekAll (q4 <> q3) @?= [1,2,3,0,4,5]
   ,testCase "Concurrent enqueue 6" $
-     let q = srInit []
-         q1 = srEnqueue 1 q
-         q1' = fst . fromJust $ srDequeue q1
-         q2 = srEnqueue 2 q
-     in srPeekAll (q1' <> q2) @?= [2]
-  ,testCase "Concurrent enqueue 7" $
-     let q = srInit []
-         q1 = srEnqueue 1 q
-         q1' = fst . fromJust $ srDequeue q1
-         q2 = srEnqueue 2 q
-     in srPeekAll (q2 <> q1') @?= [2]
+     let q = mwEnqueue "c" 9 $ mwEmpty
+         q1 = mwEnqueue "a" 1 q
+         q1' = fst . fromJust $ mwDequeue q1
+         q2 = mwEnqueue "b" 2 q
+     in mwPeekAll (q1' <> q2) @?= [2,9]
+  ,testCase "Concurrent enqueue 6" $
+     let q = mwEnqueue "c" 9 $ mwEmpty
+         q1 = mwEnqueue "a" 1 q
+         q1' = fst . fromJust $ mwDequeue q1
+         q2 = mwEnqueue "b" 2 q
+     in mwPeekAll (q2 <> q1') @?= [2,9]
   ]
 
 testCell = testGroup "SECell"

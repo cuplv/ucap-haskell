@@ -153,7 +153,7 @@ instance (GId a ~ GId b, GId a ~ GId c, GId a ~ GId d, CoordSys a, CoordSys b, C
 
 data Token i
   = Token { _tkOwner :: SECell i
-          , _tkQueue :: SRQueue i
+          , _tkQueue :: MWQueue i i
           }
   deriving (Show,Eq,Ord)
 
@@ -163,26 +163,26 @@ instance (Ord i) => Semigroup (Token i) where
   Token o1 q1 <> Token o2 q2 = Token (o1 <> o2) (q1 <> q2)
 
 mkToken :: i -> Token i
-mkToken i = Token (seInit i) srEmpty
+mkToken i = Token (seInit i) mwEmpty
 
 tokenOwner :: Token i -> i
 tokenOwner (Token o _) = seGet o
 
-isRequestedOf :: (Eq i) => i -> Token i -> Bool
-isRequestedOf i (Token o q) = i == seGet o && srLength q > 0
+isRequestedOf :: (Ord i) => i -> Token i -> Bool
+isRequestedOf i (Token o q) = i == seGet o && mwLength q > 0
 
 requestToken :: (Ord i) => i -> Token i -> Token i
 requestToken i tk@(Token o q)
-  | i == seGet o = tk
-  | otherwise = Token o (srEnqueue i q)
+  | i == seGet o || i `elem` mwPeekAll q = tk
+  | otherwise = Token o (mwEnqueue i i q)
 
 data GrantError
   = NotOwner
   | NotRequested
   deriving (Show,Eq,Ord)
 
-grantToken :: (Eq i) => i -> Token i -> Either GrantError (Token i)
-grantToken i (Token o q) = case srDequeue q of
+grantToken :: (Ord i) => i -> Token i -> Either GrantError (Token i)
+grantToken i (Token o q) = case mwDequeue q of
   Just (q2,i2) | i == seGet o -> Right $ Token (seSet i2 o) q2
                | otherwise -> Left NotOwner
   Nothing -> Left NotRequested
@@ -213,7 +213,7 @@ instance (Ord i, Cap c) => CoordSys (TokenG i c) where
 
 {-| Grant a token if appropriate (@i@ is owner and token has been
   requested), or return 'Nothing' if no change is made. -}
-handleTokenReqs :: (Eq i) => i -> Token i -> Maybe (Token i)
+handleTokenReqs :: (Ord i) => i -> Token i -> Maybe (Token i)
 handleTokenReqs i t = case grantToken i t of
                         Right t' -> Just t'
                         Left _ -> Nothing
@@ -229,18 +229,18 @@ instance (FromJSON i) => FromJSON (EscrowIntRequest i)
 
 data EscrowIntAccount i
   = EscrowIntAccount { _epaOwned :: SECell Int
-                     , _epaInbox :: SRQueue (i,Int)
-                     , _epaRequests :: SRQueue (EscrowIntRequest i)
+                     , _epaInbox :: MWQueue i (i,Int)
+                     , _epaRequests :: MWQueue i (EscrowIntRequest i)
                      }
   deriving (Show,Eq,Ord,Generic)
 
 makeLenses ''EscrowIntAccount
 
-instance (ToJSON i) => ToJSON (EscrowIntAccount i)
-instance (FromJSON i) => FromJSON (EscrowIntAccount i)
+instance (ToJSON i, ToJSONKey i) => ToJSON (EscrowIntAccount i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (EscrowIntAccount i)
 
 initAccount :: Int -> EscrowIntAccount i
-initAccount n = EscrowIntAccount (seInit n) srEmpty srEmpty
+initAccount n = EscrowIntAccount (seInit n) mwEmpty mwEmpty
 
 instance (Ord i) => Semigroup (EscrowIntAccount i) where
   EscrowIntAccount o1 i1 r1 <> EscrowIntAccount o2 i2 r2 =
@@ -317,8 +317,8 @@ escrowRequest
   -> EscrowIntPool i
 escrowRequest i (i2,amt) =
   acct i2 . epaRequests
-  %~ srEnqueue (EscrowIntRequest { _eprAsker = i
-                                 , _eprAmount = amt })
+  %~ mwEnqueue i (EscrowIntRequest { _eprAsker = i
+                                   , _eprAmount = amt })
 
 escrowRequest'
   :: (Ord i)
@@ -339,7 +339,7 @@ escrowTransfer
   -> Either Int (EscrowIntPool i)
 escrowTransfer i (i2,amt) p = do
   p' <- escrowUse i amt p
-  return $ p' & acct i2 . epaInbox %~ srEnqueue (i,amt)
+  return $ p' & acct i2 . epaInbox %~ mwEnqueue i (i,amt)
 
 escrowHandleReqs
   :: (Ord i)
@@ -347,7 +347,7 @@ escrowHandleReqs
   -> EscrowIntPool i
   -> Maybe (EscrowIntPool i)
 escrowHandleReqs i p =
-  case srDequeue (p ^. acct i . epaRequests) of
+  case mwDequeue (p ^. acct i . epaRequests) of
     Just (rs',EscrowIntRequest i2 amt) ->
       let p1 = p & acct i . epaRequests .~ rs'
       in case escrowTransfer i (i2,amt) p1 of
@@ -357,6 +357,6 @@ escrowHandleReqs i p =
 
 escrowAccept :: (Ord i) => i -> EscrowIntPool i -> EscrowIntPool i
 escrowAccept i p =
-  let (inbox',amts) = srDequeueAll $ p ^. acct i . epaInbox
+  let (inbox',amts) = mwDequeueAll $ p ^. acct i . epaInbox
   in p & acct i . epaInbox .~ inbox'
        & acct i . epaOwned %~ seMod (+ sum (snd <$> amts))
