@@ -67,6 +67,7 @@ data MRepState g e s
               , _hrCurrentState :: s
               , _hrCoord :: g
               , _hrDag :: VThread RId e
+              , _hrMsgWaiting :: [TBM g e]
               }
 
 makeLenses ''MRepState
@@ -120,6 +121,7 @@ evalMRepScript sc s0 g0 info =
                      , _hrCurrentState = s0
                      , _hrCoord = g0
                      , _hrDag = initThreads
+                     , _hrMsgWaiting = []
                      }
       m = do mrPing
              mrAwaitScript sc
@@ -137,6 +139,7 @@ evalMRepScript' sc s0 g0 info =
                      , _hrCurrentState = s0
                      , _hrCoord = g0
                      , _hrDag = initThreads
+                     , _hrMsgWaiting = []
                      }
       m = do mrPing
              mrAwaitScript sc
@@ -225,40 +228,54 @@ mrPing = do
 mrGetClock :: (MCS g) => MRepT g VC
 mrGetClock = totalClock <$> use hrDag
 
-handleMsg :: (MCS g) => TBM' g -> MRepT g Bool
+hrClearWaiting :: (MCS g) => MRepT g ()
+hrClearWaiting = do
+  ms <- use hrMsgWaiting
+  let f ms msg = handleMsg msg >>= \case
+                   MsgNonCausal -> return $ ms ++ [msg]
+                   _ -> return ms
+  ms' <- foldM f [] ms
+  hrMsgWaiting .= ms'
+
+data MsgResult
+  = MsgUpdate -- ^ A change has been made
+  | MsgOld -- ^ No new information
+  | MsgNonCausal -- ^ Could not handle yet
+
+handleMsg :: (MCS g) => TBM' g -> MRepT g MsgResult
 handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
       mrDebug $ "Handle BNewEffect from " ++ show i
       hrDag `eitherModifying` (\d -> observe rid i <$> eventImport i (v,e) d) >>= \case
-        Right () -> updateStateVal >> return True
-        Left NotCausal -> mrRequestComplete i >> return False
+        Right () -> updateStateVal >> return MsgUpdate
+        Left NotCausal -> mrRequestComplete i >> return MsgNonCausal
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
       let pong = do v1 <- mrGetClock
                     mrUnicast i $ BPong v1
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return False
-        Left OldValues -> pong >> return False
-        Right () -> pong >> return True
+        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
+        Left OldValues -> pong >> return MsgOld
+        Right () -> pong >> return MsgUpdate
     BPong v -> do
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return False
-        Left OldValues -> return False
-        Right () -> return True
+        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
+        Left OldValues -> return MsgOld
+        Right () -> return MsgUpdate
     BCoord v g -> do
       mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return False
+        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
         _ -> do hrCoord <>= g
                 g' <- use hrCoord
                 mrDebug $ "Updated to " ++ show g'
-                return True
+                return MsgUpdate
     BComplete dag1 g -> do
       mrDebug $ "Handle BComplete from " ++ show i
       hrDag `eitherModifying` mergeThread dag1 >>= \case
-        Right () -> updateStateVal >> return True
+        Right () -> updateStateVal >> return MsgUpdate
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do
@@ -266,12 +283,13 @@ handleMsg (i,msg) = do
       dag <- use hrDag
       g <- use hrCoord
       mrUnicast i $ BComplete dag g
-      return False
+      return MsgOld
 
 mrRequestComplete :: (MCS g) => RId -> MRepT g ()
-mrRequestComplete i = do
-  rid <- view hrId
-  mrUnicast i BRequest
+mrRequestComplete i = return ()
+-- mrRequestComplete i = do
+--   rid <- view hrId
+--   mrUnicast i BRequest
 
 mrAwaitScript :: (MCS g) => ScriptT g IO a -> MRepT g a
 mrAwaitScript sc = mrScript sc >>= \case
@@ -296,6 +314,9 @@ mrWaitChange = do
   cmd <- liftIO . atomically $ stm
   case cmd of
     Right msg -> handleMsg msg >>= \case
-      True -> return ()
-      False -> mrWaitChange
+      MsgUpdate -> return ()
+      MsgOld -> mrWaitChange
+      MsgNonCausal -> do
+        hrMsgWaiting %= (++ [msg])
+        mrWaitChange
     Left () -> throwError ()
