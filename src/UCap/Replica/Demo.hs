@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module UCap.Replica.Demo
   ( DemoState
@@ -37,23 +38,27 @@ import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-type RState g = (VThread (GId g) (GEffect g), Map (GId g) g)
+data RState g
+  = RState { _rsThreads :: VThread (GId g) (GEffect g)
+           , _rsCoords :: Map (GId g) g
+           , _rsSaveState :: GState g
+           , _rsAllIds :: [GId g]
+           }
+
+makeLenses ''RState
 
 {-| A monad for simulating transactions on a network of store replicas. -}
-type DemoState g m =
-       ReaderT (GState g)
-         (StateT (RState g) m)
+type DemoState g m = StateT (RState g) m
 
 {-| Run a demo action on the given initial store state (@'GState' g@) and
   starting network state (@'RState' g@). -}
 runDemo
   :: (Monad m)
-  => GState g
-  -> RState g
+  => RState g
   -> DemoState g m a
   -> m (a, RState g)
-runDemo s0 rs0 act =
-  runStateT (runReaderT act s0) rs0
+runDemo rs0 act =
+  runStateT act rs0
 
 {-| Evaluate the result of a demo action from an initial store state and
   an inital network state defined by a list of process IDs (@[i]@) and
@@ -68,7 +73,12 @@ evalDemo
   -> m a
 evalDemo ps g0 s0 act = do
   let gs = Map.fromList $ zip ps (repeat g0)
-  fst <$> runDemo s0 (initThreads,gs) act
+      rs = RState { _rsThreads = initThreads
+                  , _rsCoords = gs
+                  , _rsSaveState = s0
+                  , _rsAllIds = ps
+                  }
+  fst <$> runDemo rs act
 
 {-| Run a replica script, on a particular replica, in the demo
   simulation. -}
@@ -108,7 +118,8 @@ applyWriteState
   -> RepCtx' g
   -> DemoState g m ()
 applyWriteState i (RepCtx e g) = do
-  _1 %= event i e
+  rsThreads %= event i e
+  pruneD
   case g of
     Just g -> coordL i %= (<> g)
     Nothing -> return ()
@@ -135,28 +146,38 @@ noBlock m = m >>= \case
 observeD :: (CoordSys g, Monad m) => GId g -> GId g -> DemoState g m ()
 observeD i1 i2 = do
   -- Update effect log
-  _1 %= observe i1 i2
+  rsThreads %= observe i1 i2
+  pruneD
 
   -- Update coord structure
   cd2 <- use $ coordL i2
   coordL i1 %= (<> cd2)
 
-{-| Get the initial state. -}
-initialState :: (Monad m) => DemoState g m (GState g)
-initialState = ask
+-- {-| Get the initial state. -}
+-- initialState :: (Monad m) => DemoState g m (GState g)
+-- initialState = ask
 
 {-| Get an effect representing all updates that have occured, from the
   perspective of one process. -}
 allEffectsD :: (CoordSys g, Monad m) => GId g -> DemoState g m (GEffect g)
-allEffectsD i = mconcat . serialize . reduceToVis i <$> use _1
+allEffectsD i = mconcat . serialize . reduceToVis i <$> use rsThreads
 
 {-| Read the current state, from the perspective of one process. -}
 stateD :: (CoordSys g, Monad m) => GId g -> DemoState g m (GState g)
-stateD i = eFun <$> allEffectsD i <*> initialState
+stateD i = eFun <$> allEffectsD i <*> use rsSaveState
+
+pruneD :: (CoordSys g, Monad m) => DemoState g m ()
+pruneD = do
+  ids <- use rsAllIds
+  t <- use rsThreads
+  let (td, t') = prune ids t
+  rsThreads .= t'
+  let ed = mconcat . serialize $ td
+  rsSaveState %= eFun ed
 
 {-| A lens to the 'CoordSys' for a process ID. -}
 coordL :: (Ord (GId g)) => GId g -> Lens' (RState g) g
-coordL i = _2 . at i . nonCheat
+coordL i = rsCoords . at i . nonCheat
 
 liftDemo :: (Monad m) => m a -> DemoState g m a
-liftDemo = lift . lift
+liftDemo = lift

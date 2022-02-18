@@ -31,13 +31,12 @@ type PDemo g m = StateT (PState g m) (DemoState g m)
 
 runPDemo
   :: (CoordSys g, Monad m)
-  => GState g
-  -> RState g
+  => RState g
   -> PState g m
   -> PDemo g m a
   -> m ((a, PState g m), RState g)
-runPDemo s0 rs0 p0 act =
-  runDemo s0 rs0 (runStateT act p0)
+runPDemo rs0 p0 act =
+  runDemo rs0 (runStateT act p0)
 
 evalPDemo
   :: (CoordSys g, Monad m)

@@ -63,4 +63,8 @@ testVThread = testGroup "VThread"
   ,testCase "updateClock 4" $
      updateClock "c" (tickBy 3 "a" . tickBy 2 "c" $ zeroClock) exthread12
      @?= Right (observe "c" "a" exthread12)
+  ,testCase "meetClock 1" $
+     meetClock ["a","b"] exthread12 @?= zeroClock
+  ,testCase "meetClock 2" $
+     meetClock ["a","c"] exthread12 @?= (tickBy 2 "a" zeroClock)
   ]

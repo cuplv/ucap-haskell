@@ -25,12 +25,14 @@ module UCap.Replica.VThread
   , prune
     -- * Query
   , totalClock
+  , meetClock
   , getClock
   , getThread
   , lookupEvent
   , precedesE
   ) where
 
+import UCap.Domain.Classes (meet)
 import UCap.Replica.Types
 import UCap.Replica.VClock
 
@@ -164,10 +166,10 @@ lookupEvent (i,n) (VThread m) = case Map.lookup i m of
 getClock :: (Ord i) => i -> VThread i d -> VClock i
 getClock i t = fst $ getThread i t
 
-joinClock :: (Ord i) => [i] -> VThread i d -> VClock i
-joinClock [] _ = error "Can't get joinClock of []"
-joinClock (i:[]) t = getClock i t
-joinClock (i:is) t = joinVC (getClock i t) (joinClock is t)
+meetClock :: (Ord i) => [i] -> VThread i d -> VClock i
+meetClock [] _ = error "Can't get meetClock of []"
+meetClock (i:[]) t = getClock i t
+meetClock (i:is) t = meet (getClock i t) (meetClock is t)
 
 {-| Get the observed-clock and event list for a given process ID.  If a
   process "does not exist" in the sense that it has never made an
@@ -213,9 +215,17 @@ forkThread old new t@(VThread m) =
 {-| Remove all events not visible to the main clock of the given
   process. -}
 reduceToVis :: (Ord i) => i -> VThread i d -> VThread i d
-reduceToVis i t@(VThread m) = VThread $
-  let (v,_) = getThread i t
-      f i1 (v1,es1) = case lookupVC i1 v of
+reduceToVis i t = reduceToVis' (fst $ getThread i t) t
+-- reduceToVis i t@(VThread m) = VThread $
+--   let (v,_) = getThread i t
+--       f i1 (v1,es1) = case lookupVC i1 v of
+--                         Just n -> Just (v1,take (n + 1) es1)
+--                         Nothing -> Nothing
+--   in Map.mapMaybeWithKey f m
+
+reduceToVis' :: (Ord i) => VClock i -> VThread i d -> VThread i d
+reduceToVis' v t@(VThread m) = VThread $
+  let f i1 (v1,es1) = case lookupVC i1 v of
                         Just n -> Just (v1,take (n + 1) es1)
                         Nothing -> Nothing
   in Map.mapMaybeWithKey f m
@@ -252,8 +262,17 @@ serialize' tieBreak (VThread m) =
           | v2 `precedes` v1 = GT
           | otherwise = tieBreak i1 i2
 
-prune :: (Ord i) => VThread i d -> (VThread i d, [d])
-prune = undefined
+{-| Returns a pair @(t1,t2)@, where @t1@ contains the pruned events and
+  @t2@ is the remaining (non-closed) 'VThread'. -}
+prune :: (Ord i) => [i] -> VThread i d -> (VThread i d, VThread i d)
+prune is t@(VThread m) = 
+  let v = meetClock is t
+      tDrop = reduceToVis' v t
+      tKeep = VThread $ Map.mapWithKey f m
+      f i (vi,es) = case lookupVC i v of
+                      Just n -> (vi, drop (n + 1) es)
+                      Nothing -> (vi,es)
+  in (tDrop, tKeep)
 
 {-| An ordering on event IDs that first compares sequence number (number
   of preceding events on the same process) and then process ID. -}

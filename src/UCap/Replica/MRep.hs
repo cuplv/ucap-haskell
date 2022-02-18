@@ -147,6 +147,18 @@ evalMRepScript' sc s0 g0 info =
         return (a, m ^. hrCurrentState)
 
 
+mrAllIds :: (MCS g) => MRepT g [RId]
+mrAllIds = Map.keys <$> view hrAddrs
+
+mrPrune :: (MCS g) => MRepT g ()
+mrPrune = do
+  ids <- mrAllIds
+  t <- use hrDag
+  let (td, t') = prune ids t
+  hrDag .= t'
+  let ed = mconcat . serialize $ td
+  hrInitState %= eFun ed
+
 mrScript :: (MCS g) => ScriptT g IO a -> MRepT g (Either (ScriptB g IO a) a)
 mrScript sc = do
   rid <- view hrId
@@ -198,6 +210,7 @@ logEffect e = do
      then error $ "Clocks dont' match: " ++ show v ++ " vs. " ++ show vz
      else return ()
   hrDag %= event rid e
+  mrPrune
   updateStateVal
   g <- use hrCoord
   mrBroadcast $ BNewEffect v e g
@@ -307,7 +320,7 @@ mrCheckChange = do
   chan <- view hrInbox
   m <- liftIO . atomically $ tryReadTChan chan
   case m of
-    Just msg -> handleMsg msg >> return ()
+    Just msg -> handleMsg msg >> mrPrune
     Nothing -> return ()
 
 mrWaitChange :: (MCS g) => MRepT g ()
@@ -318,7 +331,7 @@ mrWaitChange = do
   cmd <- liftIO . atomically $ stm
   case cmd of
     Right msg -> handleMsg msg >>= \case
-      MsgUpdate -> return ()
+      MsgUpdate -> mrPrune
       MsgOld -> mrWaitChange
       MsgNonCausal -> do
         hrMsgWaiting %= (++ [msg])
