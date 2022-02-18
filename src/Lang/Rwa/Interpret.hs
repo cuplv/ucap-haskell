@@ -9,6 +9,7 @@ module Lang.Rwa.Interpret
     -- * 'Block'
   , Block (..)
   , checkBlock
+  , wrap
   ) where
 
 import Lang.Rwa.Internal

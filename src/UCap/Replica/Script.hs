@@ -34,6 +34,7 @@ data RepCtx g e
   = RepCtx { _rsStore :: e
            , _rsCoord :: g
            }
+  deriving (Show,Eq,Ord)
 
 makeLenses ''RepCtx
 

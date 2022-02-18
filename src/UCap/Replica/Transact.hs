@@ -4,6 +4,7 @@ module UCap.Replica.Transact
   , transactMany
   , transactMany_
   , grantRequests'
+  , acceptGrants'
   ) where
 
 import UCap.Coord
@@ -122,7 +123,7 @@ transactMany_ (o1:os) = do
   await . firstOf $
     [ grantRequests' `andThen_` transactMany_ (o1:os)
     , acceptGrants' `andThen_` transactMany_ (o1:os)
-    , complete1 `andThen_` transactMany_ (os)
+    , complete1 `andThen_` transactMany_ os
     ]
 
 grantRequests' :: (CoordSys g, Monad m) => ScriptB g m ()

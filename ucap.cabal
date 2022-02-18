@@ -24,6 +24,7 @@ library
                     , UCap.Op
                     , UCap.Replica
                     , UCap.Replica.Demo
+                    , UCap.Replica.EScript
                     , UCap.Replica.Http
                     , UCap.Replica.HttpDemo
                     , UCap.Replica.MRep
