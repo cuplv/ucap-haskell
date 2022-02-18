@@ -50,14 +50,14 @@ escrowDemo :: IO ()
 escrowDemo = do
   let sets = HRSettings
         { _hsAddrs = addrMap
-        , _hsInitState = 50
+        , _hsInitState = 1000
         , _hsInitCoord = initIntEscrow [alphaId] $ Map.fromList
-            [(alphaId, (50,0))
+            [(alphaId, (1000,0))
             ]
         }
       scripts = Map.fromList $
-        [(betaId, transactMany_ (replicate 20 $ subOp 1))
-        ,(gammaId, transactMany_ (replicate 10 $ subOp 3))
+        [(betaId, transactMany_ (replicate 500 $ subOp 1))
+        ,(gammaId, transactMany_ (replicate 500 $ subOp 1))
         ]
       daemons = Map.fromList $
         [(alphaId, loopBlock grantRequests')]

@@ -22,6 +22,7 @@ module UCap.Replica.VThread
   , serialize
   , serialize'
   , simpleIdOrder
+  , prune
     -- * Query
   , totalClock
   , getClock
@@ -83,9 +84,10 @@ initThreads = VThread Map.empty
 {-| @'precedesE' t e1 e2@ checks whether the event with ID @e1@ is in
   the causal closure of the event with ID @e2@. -}
 precedesE :: (Ord i) => VThread i d -> EventId i -> EventId i -> Bool
-precedesE t i1 i2 = case (lookupEvent i1 t, lookupEvent i2 t) of
-  (Just (v1,_), Just (v2,_)) ->
-    tick (fst i1) v1 `precedes` tick (fst i2) v2
+precedesE t i1 i2 = case lookupEvent i2 t of
+  Just (v2,_) -> case lookupVC (fst i1) v2 of
+                   Just n -> (snd i1) <= n
+                   Nothing -> False
   _ -> False
 
 {-| Add a new event to a thread. -}
@@ -245,6 +247,9 @@ serialize' tieBreak (VThread m) =
           | v2 `precedes` v1 = GT
           | otherwise = tieBreak i1 i2
 
+prune :: (Ord i) => VThread i d -> (VThread i d, [d])
+prune = undefined
+
 {-| An ordering on event IDs that first compares sequence number (number
   of preceding events on the same process) and then process ID. -}
 simpleIdOrder :: (Ord i) => EventId i -> EventId i -> Ordering
@@ -272,6 +277,7 @@ mergeThread (VThread m1) (VThread m2) = VThread <$> mergeA
 data UpdateClockError
   = MissingEvents
   | OldValues
+  deriving (Show,Eq,Ord)
 
 {-| Update a process's clock.  If the given clock precedes or is equal
   to the existing clock, @('Left' 'OldValues')@ is returned.  If the
@@ -303,3 +309,5 @@ updateClock i v (VThread m) =
 {-| Get the clock witnessing all existing events. -}
 totalClock :: (Ord i) => VThread i d -> VClock i
 totalClock (VThread m) = Map.foldl' (\vt (v,_) -> vt `joinVC` v) zeroClock m
+
+

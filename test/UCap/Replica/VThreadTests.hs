@@ -60,14 +60,14 @@ testVThread = testGroup "VThread"
           $ zeroClock)
   ,testCase "updateClock" $
      updateClock "z" (tickBy 3 "a" zeroClock) exthread12
-     @?= Just (observe "z" "a" exthread12)
+     @?= Right (observe "z" "a" exthread12)
   ,testCase "updateClock 2" $
      updateClock "c" (tick "a" zeroClock) exthread12
-     @?= Nothing
+     @?= Left OldValues
   ,testCase "updateClock 3" $
      updateClock "c" (tickBy 2 "a" zeroClock) exthread12
-     @?= Nothing
+     @?= Left OldValues
   ,testCase "updateClock 4" $
      updateClock "c" (tickBy 3 "a" . tickBy 2 "c" $ zeroClock) exthread12
-     @?= Just (observe "c" "a" exthread12)
+     @?= Right (observe "c" "a" exthread12)
   ]
