@@ -25,6 +25,7 @@ import UCap.Coord
 import UCap.Domain
 import UCap.Lens
 import UCap.Replica
+import UCap.Replica.EScript
 
 import Control.Concurrent.STM
 import Control.Monad.Except
@@ -68,6 +69,7 @@ data MRepState g e s
               , _hrCoord :: g
               , _hrDag :: VThread RId e
               , _hrMsgWaiting :: [TBM g e]
+              , _hrShutdownActive :: Bool
               }
 
 makeLenses ''MRepState
@@ -111,7 +113,7 @@ runMRep m s r = runReaderT (runStateT (runExceptT m) s) r
 
 evalMRepScript
   :: (MCS g)
-  => ScriptT g IO a
+  => EScriptT g a
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
@@ -122,6 +124,7 @@ evalMRepScript sc s0 g0 info =
                      , _hrCoord = g0
                      , _hrDag = initThreads
                      , _hrMsgWaiting = []
+                     , _hrShutdownActive = False
                      }
       m = do mrPing
              mrAwaitScript sc
@@ -129,7 +132,7 @@ evalMRepScript sc s0 g0 info =
 
 evalMRepScript'
   :: (MCS g)
-  => ScriptT g IO a
+  => EScriptT g a
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
@@ -140,6 +143,7 @@ evalMRepScript' sc s0 g0 info =
                      , _hrCoord = g0
                      , _hrDag = initThreads
                      , _hrMsgWaiting = []
+                     , _hrShutdownActive = False
                      }
       m = do mrPing
              mrAwaitScript sc
@@ -159,10 +163,13 @@ mrPrune = do
   let ed = mconcat . serialize $ td
   hrInitState %= eFun ed
 
-mrScript :: (MCS g) => ScriptT g IO a -> MRepT g (Either (ScriptB g IO a) a)
+mrScript
+  :: (MCS g)
+  => EScriptT g a
+  -> MRepT g (Either (EScriptB g a) a)
 mrScript sc = do
   rid <- view hrId
-  liftIO (unwrapScript sc rid) >>= \case
+  liftIO (unwrapEScript sc rid) >>= \case
     Left (ReadState f) -> mrScript . f =<< mrReadState
     Left (WriteState ctx sc') -> mrWriteState ctx >> mrScript sc'
     Left (Await acs) -> mrTryAwait acs >>= \case
@@ -170,17 +177,24 @@ mrScript sc = do
       Nothing -> return (Left acs)
     Right a -> return (Right a)
 
-mrTryAwait :: (MCS g) => ScriptB g IO a -> MRepT g (Maybe (ScriptT g IO a))
+mrTryAwait :: (MCS g) => EScriptB g a -> MRepT g (Maybe (EScriptT g a))
 mrTryAwait b = do
   rid <- view hrId
   state <- mrReadState
   liftIO $ runReaderT (checkBlock b state) rid
 
-mrReadState :: (MCS g) => MRepT g (ReadRep (RepCtx' g))
-mrReadState = RepCtx <$> use hrCurrentState <*> use hrCoord
+mrReadState :: (MCS g) => MRepT g (ExRd g (GState g))
+mrReadState = do
+  ctx <- RepCtx <$> use hrCurrentState <*> use hrCoord
+  sd <- use hrShutdownActive
+  return $ ExRd
+    { _exrStore = ctx
+    , _exrQueue = Map.empty
+    , _exrShutdown = sd
+    }
 
-mrWriteState :: (MCS g) => RepCtx' g -> MRepT g ()
-mrWriteState (RepCtx e mg) = do
+mrWriteState :: (MCS g) => ExWr g (GEffect g) -> MRepT g ()
+mrWriteState (ExWr (RepCtx e mg) q sd) = do
   rid <- view hrId
   g0 <- use hrCoord
   gUp <- case mg of
@@ -308,7 +322,7 @@ mrRequestComplete i = return ()
 --   rid <- view hrId
 --   mrUnicast i BRequest
 
-mrAwaitScript :: (MCS g) => ScriptT g IO a -> MRepT g a
+mrAwaitScript :: (MCS g) => EScriptT g a -> MRepT g a
 mrAwaitScript sc = mrScript sc >>= \case
   Right a -> return a
   Left b -> mrTryAwait b >>= \case
@@ -323,14 +337,21 @@ mrCheckChange = do
     Just msg -> handleMsg msg >> mrPrune
     Nothing -> return ()
 
+data MrChange g e
+  = MrGotMsg (TBM g e)
+  | MrShutdown
+  deriving (Show,Eq,Ord)
+
 mrWaitChange :: (MCS g) => MRepT g ()
 mrWaitChange = do
   chan <- view hrInbox
   sd <- view hrShutdown
-  let stm = (Right <$> readTChan chan) `orElse` (Left <$> takeTMVar sd)
+  let stm = 
+        (MrGotMsg <$> readTChan chan)
+        `orElse` (MrShutdown <$ takeTMVar sd)
   cmd <- liftIO . atomically $ stm
   case cmd of
-    Right msg -> handleMsg msg >>= \case
+    MrGotMsg msg -> handleMsg msg >>= \case
       MsgUpdate -> mrPrune
       MsgOld -> mrWaitChange
       MsgNonCausal -> do
@@ -338,4 +359,4 @@ mrWaitChange = do
         w <- use hrMsgWaiting
         mrDebug $ "Msgs waiting: " ++ show (length w)
         mrWaitChange
-    Left () -> throwError ()
+    MrShutdown -> hrShutdownActive .= True
