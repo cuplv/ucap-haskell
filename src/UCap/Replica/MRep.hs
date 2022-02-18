@@ -248,8 +248,12 @@ handleMsg (i,msg) = do
   case msg of
     BNewEffect v e g -> do
       mrDebug $ "Handle BNewEffect from " ++ show i
-      hrDag `eitherModifying` (\d -> observe rid i <$> eventImport i (v,e) d) >>= \case
-        Right () -> updateStateVal >> return MsgUpdate
+      let tryImport d = observe rid i <$> eventImport' i (v,e) d
+      hrDag `eitherModifying` tryImport >>= \case
+        Right () -> do updateStateVal
+                       v' <- mrGetClock
+                       mrDebug $ "Clock up to " ++ show v'
+                       return MsgUpdate
         Left NotCausal -> mrRequestComplete i >> return MsgNonCausal
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
@@ -318,5 +322,7 @@ mrWaitChange = do
       MsgOld -> mrWaitChange
       MsgNonCausal -> do
         hrMsgWaiting %= (++ [msg])
+        w <- use hrMsgWaiting
+        mrDebug $ "Msgs waiting: " ++ show (length w)
         mrWaitChange
     Left () -> throwError ()

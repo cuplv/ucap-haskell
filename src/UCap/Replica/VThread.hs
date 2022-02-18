@@ -11,6 +11,7 @@ module UCap.Replica.VThread
     -- * Modification
   , event
   , eventImport
+  , eventImport'
   , EventImportError (..)
   , updateClock
   , UpdateClockError (..)
@@ -131,6 +132,19 @@ eventImport i (v,d) t@(VThread m)
                   | otherwise -> Left $ PayloadConflict d d1
       Nothing -> Left IncompleteClock
   | otherwise = Left NotCausal
+
+{-| First runs 'updateClock' with the new event's clock, and then tries
+  'eventImport'. -}
+eventImport'
+  :: (Ord i, Eq d)
+  => i
+  -> (VClock i, d)
+  -> VThread i d
+  -> Either (EventImportError d) (VThread i d)
+eventImport' i (v,d) t = case updateClock i v t of
+  Right t' -> eventImport i (v,d) t'
+  Left OldValues -> eventImport i (v,d) t
+  Left MissingEvents -> Left NotCausal
 
 clockToId :: (Ord i) => i -> VClock i -> EventId i
 clockToId i v = case lookupVC i v of
