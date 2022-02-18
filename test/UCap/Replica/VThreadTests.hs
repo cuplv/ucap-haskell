@@ -42,16 +42,9 @@ testVThread = testGroup "VThread"
   ,testCase "eventImport 3" $
      eventImport "b" (zeroClock, "orange") exthread2
      @?= Right exthread2
-  ,testCase "eventImport 4" $
-     eventImport "b" (zeroClock, "green") exthread2
-     @?= Left (PayloadConflict "green" "orange")
   ,testCase "eventImport 5" $
      serialize <$> eventImport "z" (zeroClock, "pencil") exthread12
      @?= Right ["hello","orange","pencil","world","banana","jupiter","apple"]
-  ,testCase "eventImport 6" $
-     serialize <$> eventImport "z" (tick "a" zeroClock, "pencil") 
-                                   (observe "z" "a" exthread12)
-     @?= Left IncompleteClock
   ,testCase "totalClock" $
      totalClock exthread12
      @?= (tickBy 3 "a"

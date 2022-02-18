@@ -128,11 +128,7 @@ eventImport
   -> Either (EventImportError d) (VThread i d)
 eventImport i (v,d) t@(VThread m)
   | v == getClock i t = Right $ event i d t
-  | v `precedes` getClock i t =
-    case lookupEvent (clockToId i v) t of
-      Just (_,d1) | d1 == d -> Right t
-                  | otherwise -> Left $ PayloadConflict d d1
-      Nothing -> Left IncompleteClock
+  | v `precedes` getClock i t = Right t
   | otherwise = Left NotCausal
 
 {-| First runs 'updateClock' with the new event's clock, and then tries
@@ -157,12 +153,21 @@ clockToId i v = case lookupVC i v of
   does not exist. -}
 lookupEvent :: (Ord i) => EventId i -> VThread i d -> Maybe (Event i d)
 lookupEvent (i,n) (VThread m) = case Map.lookup i m of
-  Just (_,es) | length es > n -> Just $ es !! n
+  -- Just (_,es) | length es > n -> Just $ es !! n
+  Just (v,es) -> case lookupVC i v of
+    Just n1 | n <= n1 && n >= d -> Just $ es !! (n - d)
+      where d = (n1 + 1) - length es
+    _ -> Nothing
   _ -> Nothing
 
 {-| Get a single process's clock. -}
 getClock :: (Ord i) => i -> VThread i d -> VClock i
 getClock i t = fst $ getThread i t
+
+joinClock :: (Ord i) => [i] -> VThread i d -> VClock i
+joinClock [] _ = error "Can't get joinClock of []"
+joinClock (i:[]) t = getClock i t
+joinClock (i:is) t = joinVC (getClock i t) (joinClock is t)
 
 {-| Get the observed-clock and event list for a given process ID.  If a
   process "does not exist" in the sense that it has never made an
@@ -269,7 +274,7 @@ mergeThread (VThread m1) (VThread m2) = VThread <$> mergeA
   preserveMissing
   (zipWithAMatched $ \i a1 a2 -> case (a1,a2) of
      ((v1,_),(v2,_)) | v2 `precedes` v1 || v1 == v2 -> Right a1
-     ((v1,_),(v2,_)) | v1 `precedes` v2 -> Right a2
+                     | v1 `precedes` v2 -> Right a2
      _ -> Left i)
   m1
   m2
