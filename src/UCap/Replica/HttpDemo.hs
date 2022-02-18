@@ -6,6 +6,7 @@
 module UCap.Replica.HttpDemo where
 
 import UCap.Coord
+import UCap.Domain.Int
 import UCap.Lens
 import UCap.Op
 import UCap.Replica.Http
@@ -62,6 +63,21 @@ escrowDemo = do
         [(alphaId, loopBlock grantRequests')]
   runDemo sets scripts daemons
 
+lockDemo :: IO ()
+lockDemo = do
+  let sets = HRSettings
+        { _hsAddrs = addrMap
+        , _hsInitState = 50
+        , _hsInitCoord = mkTokenG alphaId
+        }
+      scripts = Map.fromList $
+        [(betaId, transactMany_ (replicate 20 $ subOp 1))
+        ,(gammaId, transactMany_ (replicate 10 $ subOp 3))
+        ]
+      daemons = Map.fromList $
+        [(alphaId, loopBlock grantRequests')]
+  runDemo sets scripts daemons
+
 data DebugLoop
   = Debug String
   | ScriptsDone
@@ -96,53 +112,51 @@ runDemo sets scripts daemons = do
   let sids = Map.keys scripts
   let dids = Map.keys daemons
   let ids = sids ++ dids
-  -- incomplete <- newTVarIO (Set.fromList sids) :: IO (TVar (Set RId))
   incomplete <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) sids
   allDone <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
-  dsds <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) dids
-  let runRep rid = do
+  dsds <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
+  let runRep rid ic = do
         let sc = fromJust $ Map.lookup rid scripts
+        let sc' = do sc
+                     liftScript . atomically $ putTMVar ic ()
+                     loopBlock grantRequests'
         let debug s = atomically . writeTChan dbg $ 
               "=>  " ++ rid ++ ": " ++ s ++ "\n"
-        demoRep debug rid sets sc
+        let shutdown = fromJust $ Map.lookup rid dsds
+        demoRep' shutdown debug rid sets sc'
   let forkFin rid = do
         let mv = fromJust $ Map.lookup rid allDone
+        let ic = fromJust $ Map.lookup rid incomplete
         forkFinally 
           (do atomically . writeTChan dbg $ 
                 "[*] " ++ rid ++ " initialized, with state "
                 ++ show (sets ^. hsInitState)
-              runRep rid)
+              runRep rid ic)
           (\case
               Right (Right a,s) -> atomically $ do
-                let ic = fromJust $ Map.lookup rid incomplete
-                putTMVar ic ()
+                -- let ic = fromJust $ Map.lookup rid incomplete
+                -- putTMVar ic ()
                 writeTChan dbg $ "[+] " ++ rid ++ " returned " ++ show a
                                  ++ ", with state " ++ show s
                 putTMVar mv ()
               Right (Left (),s) -> atomically $ do
-                let ic = fromJust $ Map.lookup rid incomplete
+                -- let ic = fromJust $ Map.lookup rid incomplete
                 putTMVar ic ()
                 writeTChan dbg $ "[+] " ++ rid ++ " shut down, with state " ++ show s
                 putTMVar mv ()
               Left e -> atomically $ do
                 writeTChan dbg $ show e
                 putTMVar mv ())
-          -- (\(Right (a,s)) -> atomically $ do
-          --    let ic = fromJust $ Map.lookup rid incomplete
-          --    putTMVar ic ()
-          --    writeTChan dbg $ "[+] " ++ rid ++ " returned " ++ show a
-          --                     ++ ", with state " ++ show s
-          --    putTMVar mv ())
   let runRepD rid = do
         let sc = fromJust $ Map.lookup rid daemons
-        let debug s = atomically . writeTChan dbg $ 
+        let debug s = atomically . writeTChan dbg $
               "=>  " ++ rid ++ ": " ++ s ++ "\n"
         let shutdown = fromJust $ Map.lookup rid dsds
         demoRep' shutdown debug rid sets sc
   let forkFinD rid = do
         let mv = fromJust $ Map.lookup rid allDone
         forkFinally
-          (do atomically . writeTChan dbg $ 
+          (do atomically . writeTChan dbg $
                 "[*] " ++ rid ++ " initialized, with state "
                 ++ show (sets ^. hsInitState)
               runRepD rid)

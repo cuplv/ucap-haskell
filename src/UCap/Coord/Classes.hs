@@ -155,9 +155,12 @@ data Token i
   = Token { _tkOwner :: SECell i
           , _tkQueue :: MWQueue i i
           }
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
 
 makeLenses ''Token
+
+instance (ToJSON i, ToJSONKey i) => ToJSON (Token i)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (Token i)
 
 instance (Ord i) => Semigroup (Token i) where
   Token o1 q1 <> Token o2 q2 = Token (o1 <> o2) (q1 <> q2)
@@ -189,7 +192,10 @@ grantToken i (Token o q) = case mwDequeue q of
 
 data TokenG i c
   = TokenG (Token i)
-  deriving (Show,Eq,Ord)
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON i, ToJSONKey i) => ToJSON (TokenG i c)
+instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (TokenG i c)
 
 mkTokenG :: i -> TokenG i c
 mkTokenG = TokenG . mkToken
