@@ -119,16 +119,7 @@ evalMRepScript
   -> MRepInfo g (GEffect g)
   -> IO (Either () a)
 evalMRepScript sc s0 g0 info =
-  let st = MRepState { _hrInitState = s0
-                     , _hrCurrentState = s0
-                     , _hrCoord = g0
-                     , _hrDag = initThreads
-                     , _hrMsgWaiting = []
-                     , _hrShutdownActive = False
-                     }
-      m = do mrPing
-             mrAwaitScript sc
-  in fst <$> runMRep m st info
+  fst <$> evalMRepScript' sc s0 g0 info
 
 evalMRepScript'
   :: (MCS g)
@@ -146,6 +137,10 @@ evalMRepScript' sc s0 g0 info =
                      , _hrShutdownActive = False
                      }
       m = do mrPing
+             -- In case effects have been missed due to slow start-up,
+             -- we request a complete copy of the state from all
+             -- listening peers.
+             mrRequestAll
              mrAwaitScript sc
   in do (a,m) <- runMRep m st info
         return (a, m ^. hrCurrentState)
@@ -281,24 +276,24 @@ handleMsg (i,msg) = do
                        v' <- mrGetClock
                        mrDebug $ "Clock up to " ++ show v'
                        return MsgUpdate
-        Left NotCausal -> mrRequestComplete i >> return MsgNonCausal
+        Left NotCausal -> return MsgNonCausal
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing v -> do
       let pong = do v1 <- mrGetClock
                     mrUnicast i $ BPong v1
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
+        Left MissingEvents -> return MsgNonCausal
         Left OldValues -> pong >> return MsgOld
         Right () -> pong >> return MsgUpdate
     BPong v -> do
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
+        Left MissingEvents -> return MsgNonCausal
         Left OldValues -> return MsgOld
         Right () -> return MsgUpdate
     BCoord v g -> do
       mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
       hrDag `eitherModifying` updateClock i v >>= \case
-        Left MissingEvents -> mrRequestComplete i >> return MsgNonCausal
+        Left MissingEvents -> return MsgNonCausal
         _ -> do hrCoord <>= g
                 g' <- use hrCoord
                 mrDebug $ "Updated to " ++ show g'
@@ -316,11 +311,10 @@ handleMsg (i,msg) = do
       mrUnicast i $ BComplete dag g
       return MsgOld
 
-mrRequestComplete :: (MCS g) => RId -> MRepT g ()
-mrRequestComplete i = return ()
--- mrRequestComplete i = do
---   rid <- view hrId
---   mrUnicast i BRequest
+mrRequestAll :: (MCS g) => MRepT g ()
+mrRequestAll = do
+  rid <- view hrId
+  mrBroadcast BRequest
 
 mrAwaitScript :: (MCS g) => EScriptT g a -> MRepT g a
 mrAwaitScript sc = mrScript sc >>= \case
