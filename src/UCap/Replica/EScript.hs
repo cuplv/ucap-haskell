@@ -11,6 +11,7 @@ module UCap.Replica.EScript
   , trBlock
   , loopSD
   , transactManySD_
+  , transactQueue
   , ExWr (..)
   , ExRd (..)
   , TermStatus
@@ -68,7 +69,7 @@ makeLenses ''ExWr
 -}
 data ExRd g s
   = ExRd { _exrStore :: RepCtx g s
-         , _exrQueue :: Map Int (Op g (ExceptT () IO) () ())
+         , _exrQueue :: Map Int (Op (GCap g) IO () ())
          , _exrShutdown :: Bool
          }
 
@@ -84,14 +85,21 @@ instance (Monoid g, Monoid e) => Monoid (ExWr g e) where
 instance (EffectDom e) => RwState (ExWr g e) where
   type ReadRep (ExWr g e) = ExRd g (EDState e)
 
+data ExLocal g
+  = ExLocal { _exlWaiting :: Map Int (EScriptB g ()) }
+
+
+
 {-| Script that embeds a transaction store script, and additionally
   interacts with experiments. -}
-type EScriptT g a = Rwa (ExWr g (GEffect g)) (ReaderT (GId g) IO) a
+type EScriptT g = Rwa (ExWr g (GEffect g)) (ReaderT (GId g) IO)
 
-type EScriptTerm g a = RwaTerm (ExWr g (GEffect g)) (ReaderT (GId g) IO) a
+type EScriptTerm g = RwaTerm (ExWr g (GEffect g)) (ReaderT (GId g) IO)
 
 type EScriptB g a =
        Block (ExWr g (GEffect g)) (ReaderT (GId g) IO) (EScriptT g a)
+
+makeLenses ''ExLocal
 
 {-| Interpret a transaction store script as an experiment script. -}
 trScript :: ScriptT g IO a -> EScriptT g a
@@ -148,6 +156,57 @@ transactManySD_ (o1:os) = do
     , trBlock acceptGrants' `andThen_` transactManySD_ (o1:os)
     , trBlock complete1 `andThen_` transactManySD_ os
     ]
+
+transactQueue
+  :: (CoordSys g)
+  => (String -> IO ())
+  -> EScriptT g ()
+transactQueue debug = transactQueue' debug (ExLocal Map.empty)
+
+transactQueue'
+  :: (CoordSys g)
+  => (String -> IO ())
+  -> ExLocal g
+  -> EScriptT g ()
+transactQueue' debug l@(ExLocal m) = do
+  -- ExLocal m' <- consumeQueue debug l
+  let bof (n,b) = b `andThen_` do
+        writeState $ ExWr mempty [(n,TermComplete)] []
+        transactQueue' debug $ ExLocal (Map.delete n m)
+      bs = map bof $ Map.toList m
+  liftIO $ debug "transactQueue'"
+  awaitSD . firstOf $
+    [ trBlock grantRequests' `andThen_` transactQueue' debug l
+    , trBlock acceptGrants' `andThen_` transactQueue' debug l ]
+    ++ bs
+    ++ [ consumeQueue' debug l `andThen` transactQueue' debug ]
+
+consumeQueue
+  :: (CoordSys g)
+  => (String -> IO ())
+  -> ExLocal g
+  -> EScriptT g (ExLocal g)
+consumeQueue debug (ExLocal m) = do
+  new <- view exrQueue <$> readState
+  let newIds = Map.keys new
+  liftIO $ debug "consumeQueue"
+  writeState $ ExWr mempty [] newIds
+  blocks <- traverse (\t -> trBlock <$> (trScript . transact $ t)) new
+  return $ ExLocal (m <> blocks)
+
+consumeQueue'
+  :: (CoordSys g)
+  => (String -> IO ())
+  -> ExLocal g
+  -> EScriptB g (ExLocal g)
+consumeQueue' debug (ExLocal m) = do
+  new <- view exrQueue <$> checkState
+  let newIds = Map.keys new
+  not (null newIds) ?> do
+    liftIO.debug $ "Consumed " ++ show newIds
+    writeState $ ExWr mempty [] newIds
+    blocks <- traverse (\t -> trBlock <$> (trScript . transact $ t)) new
+    return $ ExLocal (m <> blocks)
 
 liftEScript :: IO a -> EScriptT g a
 liftEScript = lift . lift

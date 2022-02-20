@@ -15,14 +15,17 @@ import UCap.Replica.EScript
 import UCap.Replica.Script
 import UCap.Replica.Transact
 
-import Control.Concurrent (forkIO, forkFinally, killThread)
+import Control.Concurrent (forkIO, forkFinally, killThread, threadDelay)
 import Control.Concurrent.STM
+import Control.Monad.State
 import Control.Monad.Trans
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time.Clock
 
 data HRSettings g = HRSettings
   { _hsAddrs :: Addrs
@@ -31,6 +34,15 @@ data HRSettings g = HRSettings
   }
 
 makeLenses ''HRSettings
+
+data FeedLoopState a
+  = FeedLoopState
+      { _flsStartTime :: UTCTime
+      , _flsIndex :: Int
+      , _flsTrs :: [a]
+      }
+
+makeLenses ''FeedLoopState
 
 alphaId = "alpha"
 alphaPort = 8090
@@ -51,33 +63,47 @@ escrowDemo :: IO ()
 escrowDemo = do
   let sets = HRSettings
         { _hsAddrs = addrMap
-        , _hsInitState = 1000
+        , _hsInitState = 100000
         , _hsInitCoord = initIntEscrow [alphaId] $ Map.fromList
-            [(alphaId, (1000,0))
+            [(alphaId, (100000,0))
             ]
         }
-      scripts = Map.fromList $
-        [(betaId, transactManySD_ (replicate 500 $ subOp 1))
-        ,(gammaId, transactManySD_ (replicate 500 $ subOp 1))
-        ]
-      daemons = Map.fromList $
-        [(alphaId, loopSD $ trBlock grantRequests')]
+      trs = repeat (subOp 1 >>> pure ())
+      scripts = [(betaId, trs), (gammaId, trs)]
+      daemons = [alphaId]
+      -- scripts = Map.fromList $
+      --   [(betaId, transactManySD_ (replicate 500 $ subOp 1))
+      --   ,(gammaId, transactManySD_ (replicate 500 $ subOp 1))
+      --   ]
+      -- daemons = Map.fromList $
+      --   [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
 
 lockDemo :: IO ()
 lockDemo = do
-  let sets = HRSettings
+  let sets :: HRSettings (TokenG String IntC)
+      sets = HRSettings
         { _hsAddrs = addrMap
         , _hsInitState = 50
         , _hsInitCoord = mkTokenG alphaId
         }
-      scripts = Map.fromList $
-        [(betaId, transactManySD_ (replicate 20 $ subOp 1))
-        ,(gammaId, transactManySD_ (replicate 10 $ subOp 3))
-        ]
-      daemons = Map.fromList $
-        [(alphaId, loopSD $ trBlock grantRequests')]
+      trs = repeat (subOp 1 >>> pure ())
+      scripts = [(betaId, trs), (gammaId, trs)]
+      daemons = [alphaId]
+      -- scripts = Map.fromList $
+      --   [(betaId, transactManySD_ (replicate 20 $ subOp 1))
+      --   ,(gammaId, transactManySD_ (replicate 10 $ subOp 3))
+      --   ]
+      -- daemons = Map.fromList $
+      --   [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
+
+data ExConf
+  = ExConf { exConfRate :: Int -- ^ Transactions per millisecond
+           , exConfDuration :: NominalDiffTime
+           }
+
+burst (ExConf r d) = r
 
 data DebugLoop
   = Debug String
@@ -85,121 +111,125 @@ data DebugLoop
   | AllDone
 
 
+feedLoop
+  :: (TChan (Int, a), TVar (Map Int TermStatus), TMVar ())
+  -> ExConf
+  -> StateT (FeedLoopState a) IO ()
+feedLoop (tq,ts,done) conf = do
+  idx <- use flsIndex
+  trs <- use flsTrs
+  let (now,later) = List.splitAt (burst conf) trs
+  flsIndex += burst conf
+  flsTrs .= later
+
+  liftIO . atomically $ mapM_ (writeTChan tq) (zip [idx..] now)
+  liftIO $ threadDelay 1000
+
+  t0 <- use flsStartTime
+  t <- liftIO  getCurrentTime
+  if addUTCTime (exConfDuration conf) t0 <= t
+     then do liftIO . atomically $ putTMVar done ()
+             return ()
+     else feedLoop (tq,ts,done) conf
+
 debugLoop
   :: TChan String
   -> Map RId (TMVar ())
   -> Map RId (TMVar ())
   -> IO ()
   -> IO ()
-debugLoop dbg allDone cs shutdown = do
+debugLoop dbg sdConfirm trDone shutdown = do
   r <- atomically $ (Debug <$> readTChan dbg)
                     `orElse` (const ScriptsDone
-                              <$> mapM_ takeTMVar cs)
-                    `orElse` (const AllDone <$> mapM_ takeTMVar allDone)
+                              <$> mapM_ takeTMVar trDone)
+                    `orElse` (const AllDone
+                              <$> mapM_ takeTMVar sdConfirm)
   case r of
-    Debug s -> putStrLn s >> debugLoop dbg allDone cs shutdown
-    ScriptsDone -> shutdown >> debugLoop dbg allDone cs shutdown
+    Debug s -> putStrLn s >> debugLoop dbg sdConfirm trDone shutdown
+    ScriptsDone -> shutdown >> debugLoop dbg sdConfirm trDone shutdown
     AllDone -> return ()
 
 runDemo
-  :: (HttpCS g, Show a)
+  :: (HttpCS g)
   => HRSettings g
-  -> Map RId (EScriptT g a)
-  -> Map RId (EScriptT g ())
+  -> [(RId, [Op' g])] -- ^ Transactors
+  -> [RId] -- ^ Idlers
   -> IO ()
-runDemo sets scripts daemons = do
+runDemo sets ops idlers = do
   dbg <- newTChanIO :: IO (TChan String)
-  
-  let sids = Map.keys scripts
-  let dids = Map.keys daemons
-  let ids = sids ++ dids
-  incomplete <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) sids
-  allDone <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
-  dsds <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
-  let runRep rid ic = do
-        let sc = fromJust $ Map.lookup rid scripts
-        let sc' = do sc
-                     liftEScript . atomically $ putTMVar ic ()
-                     loopSD $ trBlock grantRequests'
+
+  let transactors = map fst ops
+      ids = transactors ++ idlers
+      mkTrHandle i = do tq <- newTChanIO -- transaction queue
+                        ts <- newTVarIO Map.empty -- tr results map
+                        done <- newEmptyTMVarIO -- completion notifier
+                        return (i, (tq,ts,done))
+  trHandles <- Map.fromList <$> mapM mkTrHandle transactors
+  sdHandles <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
+  sdConfirm <- Map.fromList <$> mapM (\i -> (,) i <$> newEmptyTMVarIO) ids
+
+  let runRep rid = do
         let debug s = atomically . writeTChan dbg $ 
               "=>  " ++ rid ++ ": " ++ s ++ "\n"
-        let shutdown = fromJust $ Map.lookup rid dsds
-        demoRep' shutdown debug rid sets sc'
+        let shutdown = fromJust $ Map.lookup rid sdHandles
+        (tq,ts) <- case Map.lookup rid trHandles of
+                     Just (tq,ts,_) -> return (tq,ts)
+                     Nothing -> (,) <$> newTChanIO <*> newTVarIO Map.empty
+        demoRep shutdown tq ts debug rid sets
+
   let forkFin rid = do
-        let mv = fromJust $ Map.lookup rid allDone
-        let ic = fromJust $ Map.lookup rid incomplete
+        let mv = fromJust $ Map.lookup rid sdConfirm
+        -- let ic = fromJust $ Map.lookup rid incomplete
         forkFinally 
           (do atomically . writeTChan dbg $ 
                 "[*] " ++ rid ++ " initialized, with state "
                 ++ show (sets ^. hsInitState)
-              runRep rid ic)
+              runRep rid)
           (\case
-              Right (Right a,s) -> atomically $ do
-                -- let ic = fromJust $ Map.lookup rid incomplete
-                -- putTMVar ic ()
-                writeTChan dbg $ "[+] " ++ rid ++ " returned " ++ show a
-                                 ++ ", with state " ++ show s
+              Right (Right (),s) -> atomically $ do
+                writeTChan dbg $ "[+] " ++ rid ++ " returned,"
+                                 ++ " with state " ++ show s
                 putTMVar mv ()
               Right (Left (),s) -> atomically $ do
-                -- let ic = fromJust $ Map.lookup rid incomplete
-                putTMVar ic ()
-                writeTChan dbg $ "[+] " ++ rid ++ " shut down, with state " ++ show s
+                writeTChan dbg $ "[+] " ++ rid
+                                 ++ " shut down, with state " ++ show s
                 putTMVar mv ()
               Left e -> atomically $ do
                 writeTChan dbg $ show e
                 putTMVar mv ())
-  let runRepD rid = do
-        let sc = fromJust $ Map.lookup rid daemons
-        let debug s = atomically . writeTChan dbg $
-              "=>  " ++ rid ++ ": " ++ s ++ "\n"
-        let shutdown = fromJust $ Map.lookup rid dsds
-        demoRep' shutdown debug rid sets sc
-  let forkFinD rid = do
-        let mv = fromJust $ Map.lookup rid allDone
-        forkFinally
-          (do atomically . writeTChan dbg $
-                "[*] " ++ rid ++ " initialized, with state "
-                ++ show (sets ^. hsInitState)
-              runRepD rid)
-          (\case
-              Right (Right a,s) -> atomically $ do
-                writeTChan dbg $ "[+] " ++ rid ++ " returned " ++ show a
-                                 ++ ", with state " ++ show s
-                putTMVar mv ()
-              Right (Left (),s) -> atomically $ do
-                writeTChan dbg $ "[+] " ++ rid ++ " shut down, with state " ++ show s
-                putTMVar mv ()
-              Left e -> atomically $ do
-                writeTChan dbg $ show e
-                putTMVar mv ())
-          -- (\(Right (a,s)) -> )
-  mapM_ forkFinD dids
-  mapM_ forkFin sids
-  let runShutdown = atomically $ mapM_ (\m -> putTMVar m ()) dsds
-  debugLoop dbg allDone incomplete runShutdown
+
+  mapM_ forkFin ids
+
+  let forkFeeder (rid,trs) = do
+        let h = fromJust $ Map.lookup rid trHandles
+        let conf = ExConf
+              { exConfRate = 10
+              , exConfDuration = secondsToNominalDiffTime 5
+              }
+        t <- getCurrentTime
+        evalStateT (feedLoop h conf)
+          (FeedLoopState
+             { _flsStartTime = t
+             , _flsIndex = 0
+             , _flsTrs = trs
+             })
+
+  mapM_ (forkIO . forkFeeder) ops
+
+  let runShutdown = atomically $ mapM_ (\m -> putTMVar m ()) sdHandles
+  debugLoop dbg sdConfirm (Map.map (view _3) trHandles) runShutdown
 
 demoRep
   :: (HttpCS g)
-  => (String -> IO ()) -- ^ Debug action
-  -> RId
-  -> HRSettings g
-  -> EScriptT g a
-  -> IO (Either () a, GState g)
-demoRep debug rid sets sc = do
-  shutdown <- newEmptyTMVarIO
-  demoRep' shutdown debug rid sets sc
-
-demoRep'
-  :: (HttpCS g)
   => TMVar () -- ^ shutdown command input
+  -> TChan (Int, Op' g) -- ^ Transaction queue
+  -> TVar (Map Int TermStatus) -- ^ Termination records
   -> (String -> IO ()) -- ^ Debug action
   -> RId
   -> HRSettings g
-  -> EScriptT g a
-  -> IO (Either () a, GState g)
-demoRep' shutdown debug rid sets sc = do
+  -> IO (Either () (), GState g)
+demoRep shutdown tq tstatus debug rid sets = do
   inbox <- newTChanIO
-  -- shutdown <- newEmptyTMVarIO
   send <- mkSender debug (sets ^. hsAddrs)
   let port = case Map.lookup rid (sets ^. hsAddrs) of
                Just (_,p) -> p
@@ -212,7 +242,13 @@ demoRep' shutdown debug rid sets sc = do
         , _hrInbox = inbox
         , _hrDebug = debug
         , _hrShutdown = shutdown
+        , _hrGetQueue = tq
+        , _hrTermRecords = tstatus
         }
-  a <- evalMRepScript' sc (sets^.hsInitState) (sets^.hsInitCoord) info
+  a <- evalMRepScript'
+         (transactQueue debug)
+         (sets^.hsInitState)
+         (sets^.hsInitCoord)
+         info
   killThread tid
   return a

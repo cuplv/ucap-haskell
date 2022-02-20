@@ -17,6 +17,7 @@ module UCap.Replica.MRep
   , MRepInfo (..)
   , evalMRepScript
   , evalMRepScript'
+  , Op'
   ) where
 
 import Lang.Rwa
@@ -24,6 +25,7 @@ import Lang.Rwa.Interpret
 import UCap.Coord
 import UCap.Domain
 import UCap.Lens
+import UCap.Op
 import UCap.Replica
 import UCap.Replica.EScript
 
@@ -70,11 +72,15 @@ data MRepState g e s
               , _hrDag :: VThread RId e
               , _hrMsgWaiting :: [TBM g e]
               , _hrShutdownActive :: Bool
+              , _hrQueue :: Map Int (Op' g)
               }
+
+type Op' g = Op (GCap g) IO () ()
 
 makeLenses ''MRepState
 
 type Addrs = Map RId (String,Int)
+
 
 data MRepInfo g e
   = MRepInfo { _hrId :: RId
@@ -83,6 +89,8 @@ data MRepInfo g e
              , _hrInbox :: TChan (TBM g e)
              , _hrDebug :: String -> IO ()
              , _hrShutdown :: TMVar ()
+             , _hrGetQueue :: TChan (Int, Op' g)
+             , _hrTermRecords :: TVar (Map Int TermStatus)
              }
 
 makeLenses ''MRepInfo
@@ -135,6 +143,7 @@ evalMRepScript' sc s0 g0 info =
                      , _hrDag = initThreads
                      , _hrMsgWaiting = []
                      , _hrShutdownActive = False
+                     , _hrQueue = Map.empty
                      }
       m = do mrPing
              -- In case effects have been missed due to slow start-up,
@@ -182,14 +191,24 @@ mrReadState :: (MCS g) => MRepT g (ExRd g (GState g))
 mrReadState = do
   ctx <- RepCtx <$> use hrCurrentState <*> use hrCoord
   sd <- use hrShutdownActive
+  q <- use hrQueue
+  mrDebug $ "Passing along " ++ show (length q) ++ " trs."
   return $ ExRd
     { _exrStore = ctx
-    , _exrQueue = Map.empty
+    , _exrQueue = q
     , _exrShutdown = sd
     }
 
 mrWriteState :: (MCS g) => ExWr g (GEffect g) -> MRepT g ()
-mrWriteState (ExWr (RepCtx e mg) q sd) = do
+mrWriteState (ExWr (RepCtx e mg) trm rc) = do
+  mapM_ (\i -> hrQueue %= Map.delete i) rc
+  mrDebug $ show rc
+  if not $ null trm
+     then do mrDebug $ show trm
+             tv <- view hrTermRecords
+             liftIO $ atomically $ modifyTVar tv (<> Map.fromList trm)
+     else return ()
+
   rid <- view hrId
   g0 <- use hrCoord
   gUp <- case mg of
@@ -334,15 +353,17 @@ mrCheckChange = do
 data MrChange g e
   = MrGotMsg (TBM g e)
   | MrShutdown
-  deriving (Show,Eq,Ord)
+  | MrNewTransact (Int, Op' g)
 
 mrWaitChange :: (MCS g) => MRepT g ()
 mrWaitChange = do
   chan <- view hrInbox
   sd <- view hrShutdown
+  tq <- view hrGetQueue
   let stm = 
         (MrGotMsg <$> readTChan chan)
         `orElse` (MrShutdown <$ takeTMVar sd)
+        `orElse` (MrNewTransact <$> readTChan tq)
   cmd <- liftIO . atomically $ stm
   case cmd of
     MrGotMsg msg -> handleMsg msg >>= \case
@@ -355,3 +376,6 @@ mrWaitChange = do
         mrWaitChange
     MrShutdown -> do
       hrShutdownActive .= True
+    MrNewTransact (n,op) -> do
+      mrDebug "Got new transaction."
+      hrQueue %= Map.insert n op
