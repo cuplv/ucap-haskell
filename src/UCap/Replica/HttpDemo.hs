@@ -11,6 +11,7 @@ import UCap.Lens
 import UCap.Op
 import UCap.Replica.Http
 import UCap.Replica.MRep
+import UCap.Replica.EScript
 import UCap.Replica.Script
 import UCap.Replica.Transact
 
@@ -56,11 +57,11 @@ escrowDemo = do
             ]
         }
       scripts = Map.fromList $
-        [(betaId, transactMany_ (replicate 500 $ subOp 1))
-        ,(gammaId, transactMany_ (replicate 500 $ subOp 1))
+        [(betaId, transactManySD_ (replicate 500 $ subOp 1))
+        ,(gammaId, transactManySD_ (replicate 500 $ subOp 1))
         ]
       daemons = Map.fromList $
-        [(alphaId, loopBlock grantRequests')]
+        [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
 
 lockDemo :: IO ()
@@ -71,11 +72,11 @@ lockDemo = do
         , _hsInitCoord = mkTokenG alphaId
         }
       scripts = Map.fromList $
-        [(betaId, transactMany_ (replicate 20 $ subOp 1))
-        ,(gammaId, transactMany_ (replicate 10 $ subOp 3))
+        [(betaId, transactManySD_ (replicate 20 $ subOp 1))
+        ,(gammaId, transactManySD_ (replicate 10 $ subOp 3))
         ]
       daemons = Map.fromList $
-        [(alphaId, loopBlock grantRequests')]
+        [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
 
 data DebugLoop
@@ -103,8 +104,8 @@ debugLoop dbg allDone cs shutdown = do
 runDemo
   :: (HttpCS g, Show a)
   => HRSettings g
-  -> Map RId (ScriptT g IO a)
-  -> Map RId (ScriptT g IO ())
+  -> Map RId (EScriptT g a)
+  -> Map RId (EScriptT g ())
   -> IO ()
 runDemo sets scripts daemons = do
   dbg <- newTChanIO :: IO (TChan String)
@@ -118,8 +119,8 @@ runDemo sets scripts daemons = do
   let runRep rid ic = do
         let sc = fromJust $ Map.lookup rid scripts
         let sc' = do sc
-                     liftScript . atomically $ putTMVar ic ()
-                     loopBlock grantRequests'
+                     liftEScript . atomically $ putTMVar ic ()
+                     loopSD $ trBlock grantRequests'
         let debug s = atomically . writeTChan dbg $ 
               "=>  " ++ rid ++ ": " ++ s ++ "\n"
         let shutdown = fromJust $ Map.lookup rid dsds
@@ -182,7 +183,7 @@ demoRep
   => (String -> IO ()) -- ^ Debug action
   -> RId
   -> HRSettings g
-  -> ScriptT g IO a
+  -> EScriptT g a
   -> IO (Either () a, GState g)
 demoRep debug rid sets sc = do
   shutdown <- newEmptyTMVarIO
@@ -194,7 +195,7 @@ demoRep'
   -> (String -> IO ()) -- ^ Debug action
   -> RId
   -> HRSettings g
-  -> ScriptT g IO a
+  -> EScriptT g a
   -> IO (Either () a, GState g)
 demoRep' shutdown debug rid sets sc = do
   inbox <- newTChanIO

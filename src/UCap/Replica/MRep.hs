@@ -359,4 +359,5 @@ mrWaitChange = do
         w <- use hrMsgWaiting
         mrDebug $ "Msgs waiting: " ++ show (length w)
         mrWaitChange
-    MrShutdown -> hrShutdownActive .= True
+    MrShutdown -> do
+      hrShutdownActive .= True

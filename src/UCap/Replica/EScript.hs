@@ -9,9 +9,12 @@ module UCap.Replica.EScript
   , unwrapEScript
   , trScript
   , trBlock
+  , loopSD
+  , transactManySD_
   , ExWr (..)
   , ExRd (..)
   , TermStatus
+  , liftEScript
   , module Lang.Rwa
   , module Lang.Rwa.Interpret
   ) where
@@ -100,15 +103,6 @@ trScript sc = do
     Left (WriteState ctx sc') -> 
       wrap $ WriteState (ExWr ctx [] []) (trScript sc')
     Left (Await b) -> wrap . Await $ trBlock b
-    -- Left (Await (Block m)) -> wrap . Await . Block $
-    --   do rdv <- ask
-    --      rid <- lift . lift $ ask
-    --      r <- liftIO $ runReaderT (runReaderT (runExceptT m)
-    --                                           (rdv^.exrStore))
-    --                               rid
-    --      case r of
-    --        Right sc' -> return $ trScript sc'
-    --        Left e -> throwError e
     Right a -> return a
 
 trBlock :: ScriptB g IO a -> EScriptB g a
@@ -139,12 +133,12 @@ awaitSD b = await . firstOf $
 
 {-| Loop, but shutdown when requested. -}
 loopSD :: EScriptB g a -> EScriptT g ()
-loopSD b = awaitSD (b `andThen_` return ()) >> loopSD b
+loopSD b = awaitSD (b `andThen_` loopSD b)
 
 {-| Run a sequence of transactions, but shutdown when requested. -}
 transactManySD_
   :: (CoordSys g)
-  => [Op (GCap g) IO () ()]
+  => [Op (GCap g) IO () a]
   -> EScriptT g ()
 transactManySD_ [] = return ()
 transactManySD_ (o1:os) = do
@@ -154,3 +148,6 @@ transactManySD_ (o1:os) = do
     , trBlock acceptGrants' `andThen_` transactManySD_ (o1:os)
     , trBlock complete1 `andThen_` transactManySD_ os
     ]
+
+liftEScript :: IO a -> EScriptT g a
+liftEScript = lift . lift
