@@ -4,11 +4,13 @@
 module Lang.Rwa
   ( -- * 'Rwa'
     Rwa
+  , MonadRwa (..)
   , readState
   , writeState
   , await
     -- * 'Block'
   , Block
+  , Block'
   , notReady
   , checkState
   , whenBlocked
@@ -32,6 +34,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Free
 import Lens.Micro.Platform
+
+type Block' m a = Block (RwaS m) (RwaU m) (m a)
 
 readState :: (Monad m) => Rwa w m (ReadRep w)
 readState = wrap $ ReadState return

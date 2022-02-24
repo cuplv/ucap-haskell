@@ -86,7 +86,7 @@ script
   :: (CoordSys g, Monad m)
   => (GId g)
   -> ScriptT g m a
-  -> DemoState g m (Either (ScriptB g m a) a)
+  -> DemoState g m (Either (Block' (ScriptT g m) a) a)
 script i sc = liftDemo (unwrapScript sc i) >>= \case
   Left (ReadState f) ->
     script i . f =<< assembleReadState i
@@ -100,7 +100,7 @@ script i sc = liftDemo (unwrapScript sc i) >>= \case
 tryAwait
   :: (CoordSys g, Monad m)
   => GId g
-  -> ScriptB g m a
+  -> Block' (ScriptT g m) a
   -> DemoState g m (Maybe (ScriptT g m a))
 tryAwait i b = do
   state <- assembleReadState i
@@ -130,7 +130,7 @@ applyWriteState i (RepCtx e g) = do
   => GId g
   -> Op (GCap g) m () a
   -> DemoState g m (Either
-                      (ScriptB g m (Either g a))
+                      (Block' (ScriptT g m) (Either g a))
                       (Either g  a))
 i .// op = script i (transactSimple op)
 

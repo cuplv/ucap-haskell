@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Lang.Rwa.Interpret
   ( -- * 'RwState'
     -- $RwState
@@ -5,6 +7,8 @@ module Lang.Rwa.Interpret
     -- * 'RwaTerm'
   , RwaTerm (..)
   , Rwa
+  , MonadRwa (..)
+  , runRwa
   , nextTerm
     -- * 'Block'
   , Block (..)
@@ -43,6 +47,37 @@ checkBlock (Block m) state = do
   case r of
     Right a -> return $ Just a
     Left () -> return $ Nothing
+
+{-| Run an 'Rwa' script, using an initial state, a way of updating the
+  state using an 'RwState' value, and a background state-updating
+  action to take when the script blocks.  The state-updating action
+  continues to run until the block is cleared. -}
+runRwa
+  :: (Monad m)
+  => Rwa w m a
+  -> ReadRep w -- ^ State value
+  -> (w -> ReadRep w -> m (ReadRep w)) -- ^ Write action
+  -> (ReadRep w -> m (ReadRep w)) -- ^ Background update action
+  -> m a
+runRwa sc s write bg = nextTerm sc >>= \case
+  Left (ReadState f) -> runRwa (f s) s write bg
+  Left (WriteState w sc) -> do
+    s <- write w s
+    runRwa sc s write bg
+  Left (Await b) -> do
+    (s,sc) <- runBlock b bg s
+    runRwa sc s write bg
+  Right a -> return a
+
+runBlock
+  :: (Monad m)
+  => Block w m a
+  -> (ReadRep w -> m (ReadRep w))
+  -> ReadRep w
+  -> m (ReadRep w, a)
+runBlock b update s = checkBlock b s >>= \case
+  Just a -> return (s,a)
+  Nothing -> update s >>= runBlock b update
 
 {- $RwState
 The 'RwState' class is for pairs of types that represent different representations for reading and writing on some state.

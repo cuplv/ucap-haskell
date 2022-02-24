@@ -5,6 +5,7 @@ import Test.Tasty.HUnit
 
 import Data.InfMapTests (testInfMap)
 import Data.SRQueueTests (testSRQueue)
+import Lang.RwaTests (testRwa)
 import UCapTests (testUCap)
 import UCap.MapTests (testMap)
 import UCap.OpTests (testOp)
@@ -20,6 +21,7 @@ tests :: TestTree
 tests = testGroup "Tests" 
   [ testInfMap
   , testSRQueue
+  , testRwa
   , testVClock
   , testUCap
   , testMap

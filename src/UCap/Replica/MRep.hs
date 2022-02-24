@@ -170,7 +170,7 @@ mrPrune = do
 mrScript
   :: (MCS g)
   => EScriptT g a
-  -> MRepT g (Either (EScriptB g a) a)
+  -> MRepT g (Either (Block' (EScriptT g) a) a)
 mrScript sc = do
   rid <- view hrId
   liftIO (unwrapEScript sc rid) >>= \case
@@ -181,7 +181,10 @@ mrScript sc = do
       Nothing -> return (Left acs)
     Right a -> return (Right a)
 
-mrTryAwait :: (MCS g) => EScriptB g a -> MRepT g (Maybe (EScriptT g a))
+mrTryAwait
+  :: (MCS g)
+  => Block' (EScriptT g) a
+  -> MRepT g (Maybe (EScriptT g a))
 mrTryAwait b = do
   rid <- view hrId
   state <- mrReadState

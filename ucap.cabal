@@ -74,6 +74,7 @@ test-suite test
     main-is:          test.hs
     other-modules:    Data.InfMapTests
                     , Data.SRQueueTests
+                    , Lang.RwaTests
                     , UCapTests
                     , UCap.MapTests
                     , UCap.OpTests

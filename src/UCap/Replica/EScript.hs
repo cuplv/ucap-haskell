@@ -5,7 +5,6 @@
 module UCap.Replica.EScript
   ( EScriptT
   , EScriptTerm
-  , EScriptB
   , unwrapEScript
   , trScript
   , trBlock
@@ -31,6 +30,7 @@ import UCap.Replica.Transact
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -86,7 +86,7 @@ instance (EffectDom e) => RwState (ExWr g e) where
   type ReadRep (ExWr g e) = ExRd g (EDState e)
 
 data ExLocal g
-  = ExLocal { _exlWaiting :: Map Int (EScriptB g ()) }
+  = ExLocal { _exlWaiting :: Map Int (Block' (EScriptT g) ()) }
 
 
 
@@ -95,9 +95,6 @@ data ExLocal g
 type EScriptT g = Rwa (ExWr g (GEffect g)) (ReaderT (GId g) IO)
 
 type EScriptTerm g = RwaTerm (ExWr g (GEffect g)) (ReaderT (GId g) IO)
-
-type EScriptB g a =
-       Block (ExWr g (GEffect g)) (ReaderT (GId g) IO) (EScriptT g a)
 
 makeLenses ''ExLocal
 
@@ -113,7 +110,7 @@ trScript sc = do
     Left (Await b) -> wrap . Await $ trBlock b
     Right a -> return a
 
-trBlock :: ScriptB g IO a -> EScriptB g a
+trBlock :: Block' (ScriptT g IO) a -> Block' (EScriptT g) a
 trBlock (Block m) = Block $
   do rdv <- ask
      rid <- lift . lift $ ask
@@ -132,15 +129,24 @@ unwrapEScript sc i = runReaderT (nextTerm sc) i
 
 {-| Await a 'Block', or skip it and terminate if the 'exrShutdown' flag
   in the state is 'True'. -}
-awaitSD :: EScriptB g () -> EScriptT g ()
+awaitSD :: Block' (EScriptT g) () -> EScriptT g ()
 awaitSD b = await . firstOf $
   [ (do s <- checkState
         (s^.exrShutdown) ?> return ())
   , b
   ]
 
+awaitSD'
+  :: Block' (StateT (ExLocal g) (EScriptT g)) ()
+  -> StateT (ExLocal g) (EScriptT g) ()
+awaitSD' b = awaitM . firstOf $
+  [ (do s <- checkState
+        (s^.exrShutdown) ?> return ())
+  , b
+  ]
+
 {-| Loop, but shutdown when requested. -}
-loopSD :: EScriptB g a -> EScriptT g ()
+loopSD :: Block' (EScriptT g) a -> EScriptT g ()
 loopSD b = awaitSD (b `andThen_` loopSD b)
 
 {-| Run a sequence of transactions, but shutdown when requested. -}
@@ -161,52 +167,41 @@ transactQueue
   :: (CoordSys g)
   => (String -> IO ())
   -> EScriptT g ()
-transactQueue debug = transactQueue' debug (ExLocal Map.empty)
+transactQueue debug =
+  evalStateT (transactQueue' debug) (ExLocal Map.empty)
 
 transactQueue'
   :: (CoordSys g)
   => (String -> IO ())
-  -> ExLocal g
-  -> EScriptT g ()
-transactQueue' debug l@(ExLocal m) = do
-  -- ExLocal m' <- consumeQueue debug l
-  let bof (n,b) = b `andThen_` do
-        writeState $ ExWr mempty [(n,TermComplete)] []
-        transactQueue' debug $ ExLocal (Map.delete n m)
+  -> StateT (ExLocal g) (EScriptT g) ()
+transactQueue' debug = do
+  m <- use exlWaiting
+  let bof (n,b) = (lift <$> b) `andThen_` do
+        lift.writeState $ ExWr mempty [(n,TermComplete)] []
+        exlWaiting %= Map.delete n
+        transactQueue' debug
       bs = map bof $ Map.toList m
   liftIO $ debug "transactQueue'"
-  awaitSD . firstOf $
-    [ trBlock grantRequests' `andThen_` transactQueue' debug l
-    , trBlock acceptGrants' `andThen_` transactQueue' debug l ]
+  awaitSD' . firstOf $
+    [ (lift <$> trBlock grantRequests') `andThen_` transactQueue' debug
+    , (lift <$> trBlock acceptGrants') `andThen_` transactQueue' debug ]
     ++ bs
-    ++ [ consumeQueue' debug l `andThen` transactQueue' debug ]
+    ++ [ consumeQueue debug `andThen_` transactQueue' debug ]
 
 consumeQueue
   :: (CoordSys g)
   => (String -> IO ())
-  -> ExLocal g
-  -> EScriptT g (ExLocal g)
-consumeQueue debug (ExLocal m) = do
-  new <- view exrQueue <$> readState
-  let newIds = Map.keys new
-  liftIO $ debug "consumeQueue"
-  writeState $ ExWr mempty [] newIds
-  blocks <- traverse (\t -> trBlock <$> (trScript . transact $ t)) new
-  return $ ExLocal (m <> blocks)
-
-consumeQueue'
-  :: (CoordSys g)
-  => (String -> IO ())
-  -> ExLocal g
-  -> EScriptB g (ExLocal g)
-consumeQueue' debug (ExLocal m) = do
+  -> Block' (StateT (ExLocal g) (EScriptT g)) ()
+consumeQueue debug = do
   new <- view exrQueue <$> checkState
   let newIds = Map.keys new
   not (null newIds) ?> do
     liftIO.debug $ "Consumed " ++ show newIds
-    writeState $ ExWr mempty [] newIds
-    blocks <- traverse (\t -> trBlock <$> (trScript . transact $ t)) new
-    return $ ExLocal (m <> blocks)
+    lift.writeState $ ExWr mempty [] newIds
+    blocks <- lift $ traverse
+                       (\t -> trBlock <$> (trScript . transact $ t))
+                       new
+    exlWaiting <>= blocks
 
 liftEScript :: IO a -> EScriptT g a
 liftEScript = lift . lift

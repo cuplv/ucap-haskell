@@ -19,7 +19,7 @@ type PScript g m = ScriptT g m ()
 data RepState g m
   = Idle
   | Running (PScript g m)
-  | Waiting (ScriptB g m ())
+  | Waiting (Block' (ScriptT g m) ())
 
 isIdle :: RepState g m -> Bool
 isIdle Idle = True

@@ -82,7 +82,7 @@ runUpdate t s = do
 transact
   :: (CoordSys g, Monad m)
   => Op (GCap g) m () a
-  -> ScriptT g m (ScriptB g m a)
+  -> ScriptT g m (Block' (ScriptT g m) a)
 transact t = do
   rid <- getReplicaId
   ctx <- readState
@@ -126,7 +126,7 @@ transactMany_ (o1:os) = do
     , complete1 `andThen_` transactMany_ os
     ]
 
-grantRequests' :: (CoordSys g, Monad m) => ScriptB g m ()
+grantRequests' :: (CoordSys g, Monad m) => Block' (ScriptT g m) ()
 grantRequests' = do
   rid <- lift getReplicaId
   g <- view rsCoord <$> checkState
@@ -136,7 +136,7 @@ grantRequests' = do
       setCoord g'
     Nothing -> notReady
 
-acceptGrants' :: (CoordSys g, Monad m) => ScriptB g m ()
+acceptGrants' :: (CoordSys g, Monad m) => Block' (ScriptT g m) ()
 acceptGrants' = do
   rid <- lift getReplicaId
   g <- view rsCoord <$> checkState

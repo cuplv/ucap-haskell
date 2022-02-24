@@ -6,7 +6,6 @@
 module UCap.Replica.Script
   ( ScriptT
   , ScriptTerm
-  , ScriptB
   , RepCtx (..)
   , rsStore
   , rsCoord
@@ -50,11 +49,9 @@ instance (EffectDom e) => RwState (RepCtx (Maybe g) e) where
 
 type RepCtx' g = RepCtx (Maybe g) (GEffect g)
 
-type ScriptT g m a = Rwa (RepCtx' g) (ReaderT (GId g) m) a
+type ScriptT g m = Rwa (RepCtx' g) (ReaderT (GId g) m)
 
-type ScriptTerm g m a = RwaTerm (RepCtx' g) (ReaderT (GId g) m) a
-
-type ScriptB g m a = Block (RepCtx' g) (ReaderT (GId g) m) (ScriptT g m a)
+type ScriptTerm g m = RwaTerm (RepCtx' g) (ReaderT (GId g) m)
 
 getReplicaId :: (MonadReader i m) => m i
 getReplicaId = ask

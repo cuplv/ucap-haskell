@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Lang.Rwa.Internal
@@ -5,10 +7,12 @@ module Lang.Rwa.Internal
   , Block (..)
   , RwaTerm (..)
   , Rwa
+  , MonadRwa (..)
   ) where
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Trans.Free
 import Lens.Micro.Platform
 
@@ -56,3 +60,21 @@ instance (Functor m) => Functor (RwaTerm w m) where
                 Await b -> Await $ fmap f b
 
 type Rwa w m = FreeT (RwaTerm w m) m
+
+class (Monad (RwaU m)) => MonadRwa m where
+  type RwaS m
+  type RwaU m :: * -> *
+
+  {-| 'awaitM' is like 'Lang.Rwa.await', but works cleanly over monad
+  transformers like 'Control.Monad.State.StateT'. -}
+  awaitM :: Block (RwaS m) (RwaU m) (m a) -> m a
+
+instance (Monad m) => MonadRwa (FreeT (RwaTerm w m) m) where
+  type RwaS (FreeT (RwaTerm w m) m) = w
+  type RwaU (FreeT (RwaTerm w m) m) = m
+  awaitM b = wrap $ Await b
+
+instance (MonadRwa m) => MonadRwa (StateT s m) where
+  type RwaS (StateT s m) = RwaS m
+  type RwaU (StateT s m) = RwaU m
+  awaitM b = StateT $ \s -> awaitM ((\a -> runStateT a s) <$> b)
