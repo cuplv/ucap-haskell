@@ -71,12 +71,6 @@ escrowDemo = do
       trs = repeat (subOp 1 >>> pure ())
       scripts = [(betaId, trs), (gammaId, trs)]
       daemons = [alphaId]
-      -- scripts = Map.fromList $
-      --   [(betaId, transactManySD_ (replicate 500 $ subOp 1))
-      --   ,(gammaId, transactManySD_ (replicate 500 $ subOp 1))
-      --   ]
-      -- daemons = Map.fromList $
-      --   [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
 
 lockDemo :: IO ()
@@ -90,12 +84,6 @@ lockDemo = do
       trs = repeat (subOp 1 >>> pure ())
       scripts = [(betaId, trs), (gammaId, trs)]
       daemons = [alphaId]
-      -- scripts = Map.fromList $
-      --   [(betaId, transactManySD_ (replicate 20 $ subOp 1))
-      --   ,(gammaId, transactManySD_ (replicate 10 $ subOp 3))
-      --   ]
-      -- daemons = Map.fromList $
-      --   [(alphaId, loopSD $ trBlock grantRequests')]
   runDemo sets scripts daemons
 
 data ExConf
@@ -179,7 +167,6 @@ runDemo sets ops idlers = do
 
   let forkFin rid = do
         let mv = fromJust $ Map.lookup rid sdConfirm
-        -- let ic = fromJust $ Map.lookup rid incomplete
         forkFinally 
           (do atomically . writeTChan dbg $ 
                 "[*] " ++ rid ++ " initialized, with state "

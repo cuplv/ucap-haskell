@@ -60,6 +60,15 @@ testVThread = testGroup "VThread"
   ,testCase "updateClock 3" $
      updateClock "c" (tickBy 2 "a" zeroClock) exthread12
      @?= Left OldValues
+  ,testCase "updateClock 5" $
+     updateClock "c" (getClock "c" exthread12) exthread2
+     @?= Left MissingEvents
+  ,testCase "updateClock 6" $
+     updateClock "a" (getClock "a" exthread12) exthread2
+     @?= Left OldValues
+  ,testCase "updateClock 7" $
+     updateClock "a" (tick "a" (getClock "a" exthread12)) exthread2
+     @?= Left MissingEvents
   ,testCase "updateClock 4" $
      updateClock "c" (tickBy 3 "a" . tickBy 2 "c" $ zeroClock) exthread12
      @?= Right (observe "c" "a" exthread12)

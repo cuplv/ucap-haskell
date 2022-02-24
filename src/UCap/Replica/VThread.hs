@@ -314,8 +314,7 @@ updateClock
   -> VClock i
   -> VThread i d
   -> Either UpdateClockError (VThread i d)
-updateClock i v t | not (v `leVC` totalClock t) =
-  error "updateClock: missing events"
+updateClock i v t | not (v `leVC` totalClock t) = Left MissingEvents
 updateClock i v (VThread m) =
   let m' = Map.alter
              (\a -> case a of
