@@ -30,6 +30,7 @@ module UCap.Replica.VThread
   , getThread
   , lookupEvent
   , precedesE
+  , sizeVT
   ) where
 
 import UCap.Domain.Classes (meet)
@@ -333,4 +334,9 @@ updateClock i v (VThread m) =
 totalClock :: (Ord i) => VThread i d -> VClock i
 totalClock (VThread m) = Map.foldl' (\vt (v,_) -> vt `joinVC` v) zeroClock m
 
-
+{-| Current number of events in a 'VThread'.  Note that this may be
+  smaller than the number of ticks recorded in 'totalClock', due to
+  pruning. -}
+sizeVT :: (Ord i) => VThread i d -> Int
+sizeVT (VThread m) = Map.foldl f 0 m
+  where f n (_,es) = n + length es

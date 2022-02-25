@@ -7,6 +7,7 @@ module UCap.Replica.VClock
   , tickBy
   , precedes
   , concurrent
+  , aggDiff
   , lookupVC
   , joinVC
   , leVC
@@ -127,3 +128,17 @@ changed v1 v2 = filter
 
 toList :: (Ord i) => VClock i -> [(i,Int)]
 toList (VClock m) = Map.toList m
+
+{-| @('aggDiff' v1 v2)@ gives the positive "aggregate difference"
+  between the two clocks.  This is the total number of ticks found in
+  @v2@ that are not found in @v1@.
+
+  If @v1@ and @v2@ are concurrent, both @('aggDiff' v1 v2)@ and
+  @('aggDiff' v2 v1)@ will be greater than @0@.
+-}
+aggDiff :: (Ord i) => VClock i -> VClock i -> Int
+aggDiff (VClock m1) v2 = Map.foldlWithKey f 0 m1
+  where f n i n1 = case lookupVC i v2 of
+                     Just n2 | n1 > n2 -> n + (n1 - n2)
+                             | otherwise -> n
+                     Nothing -> n + n1 + 1

@@ -76,4 +76,6 @@ testVThread = testGroup "VThread"
      meetClock ["a","b"] exthread12 @?= zeroClock
   ,testCase "meetClock 2" $
      meetClock ["a","c"] exthread12 @?= (tickBy 2 "a" zeroClock)
+  ,testCase "sizeVT" $
+     sizeVT exthread12 @?= 6
   ]

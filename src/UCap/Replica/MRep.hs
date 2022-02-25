@@ -38,6 +38,8 @@ import Data.Aeson hiding ((.=))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.List as List
+import Data.Set (Set)
+import qualified Data.Set as Set
 import GHC.Generics
 
 type RId = String
@@ -46,8 +48,8 @@ class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
 instance (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
 
 data BMsg g e
-  = BPing VC
-  | BPong VC
+  = BPing (Set RId) VC
+  | BPong (Set RId) VC
   | BNewEffect VC e g
   | BCoord VC g
   | BComplete (VThread String e) g
@@ -56,6 +58,15 @@ data BMsg g e
 
 instance (ToJSON e, ToJSON g) => ToJSON (BMsg g e)
 instance (FromJSON e, FromJSON g) => FromJSON (BMsg g e)
+
+bmsgClock :: (MCS g) => BMsg g e -> VC
+bmsgClock = \case
+  BPing _ v -> v
+  BPong _ v -> v
+  BNewEffect v _ _ -> v
+  BCoord v _ -> v
+  BComplete _ _ -> zeroClock
+  BRequest -> zeroClock
 
 type BMsg' g = BMsg g (GEffect g)
 
@@ -73,6 +84,8 @@ data MRepState g e s
               , _hrMsgWaiting :: [TBM g e]
               , _hrShutdownActive :: Bool
               , _hrQueue :: Map Int (Op' g)
+              , _lastSentClock :: VC
+              , _hrLiveNodes :: Set RId
               }
 
 type Op' g = Op (GCap g) IO () ()
@@ -91,6 +104,7 @@ data MRepInfo g e
              , _hrShutdown :: TMVar ()
              , _hrGetQueue :: TChan (Int, Op' g)
              , _hrTermRecords :: TVar (Map Int TermStatus)
+             , _hrAllReady :: TMVar ()
              }
 
 makeLenses ''MRepInfo
@@ -144,6 +158,8 @@ evalMRepScript' sc s0 g0 info =
                      , _hrMsgWaiting = []
                      , _hrShutdownActive = False
                      , _hrQueue = Map.empty
+                     , _lastSentClock = zeroClock
+                     , _hrLiveNodes = Set.singleton (info^.hrId)
                      }
       m = do mrPing
              -- In case effects have been missed due to slow start-up,
@@ -238,7 +254,7 @@ logEffect e = do
   vz <- fst . getThread rid <$> use hrDag
   v <- mrGetClock
   if v /= vz
-     then error $ "Clocks dont' match: " ++ show v ++ " vs. " ++ show vz
+     then error $ "Clocks don't match: " ++ show v ++ " vs. " ++ show vz
      else return ()
   hrDag %= event rid e
   mrPrune
@@ -261,13 +277,28 @@ mrUnicast i msg = do
   liftIO $ send rid i msg
 
 mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
-mrBroadcast msg = mapM_ (\i -> mrUnicast i msg) =<< mrOtherIds
+mrBroadcast msg = do
+  mapM_ (\i -> mrUnicast i msg) =<< mrOtherIds
+  lastSentClock %= joinVC (bmsgClock msg)
 
 mrPing :: (MCS g) => MRepT g ()
 mrPing = do
   rid <- view hrId
   v <- mrGetClock
-  mrBroadcast $ BPing v
+  lv <- use hrLiveNodes
+  mrBroadcast $ BPing lv v
+
+mkPing :: (MCS g) => MRepT g (BMsg' g)
+mkPing = do
+  v <- mrGetClock
+  lv <- use hrLiveNodes
+  return $ BPing lv v
+
+mkPong :: (MCS g) => MRepT g (BMsg' g)
+mkPong = do
+  v <- mrGetClock
+  lv <- use hrLiveNodes
+  return $ BPong lv v
 
 mrGetClock :: (MCS g) => MRepT g VC
 mrGetClock = totalClock <$> use hrDag
@@ -297,17 +328,24 @@ handleMsg (i,msg) = do
         Right () -> do updateStateVal
                        v' <- mrGetClock
                        mrDebug $ "Clock up to " ++ show v'
+                       mrCompareClock
                        return MsgUpdate
         Left NotCausal -> return MsgNonCausal
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
-    BPing v -> do
-      let pong = do v1 <- mrGetClock
-                    mrUnicast i $ BPong v1
+    BPing lv v -> do
+      -- hrLiveNodes %= Set.union lv
+      mrUpdateLive lv
+      -- pong <- mkPong
+      let pong = mrUnicast i =<< mkPong
+      -- let pong = do v1 <- mrGetClock
+      --               mrUnicast i $ BPong v1
       hrDag `eitherModifying` updateClock i v >>= \case
         Left MissingEvents -> return MsgNonCausal
         Left OldValues -> pong >> return MsgOld
         Right () -> pong >> return MsgUpdate
-    BPong v -> do
+    BPong lv v -> do
+      -- hrLiveNodes %= Set.union lv
+      mrUpdateLive lv
       hrDag `eitherModifying` updateClock i v >>= \case
         Left MissingEvents -> return MsgNonCausal
         Left OldValues -> return MsgOld
@@ -323,7 +361,15 @@ handleMsg (i,msg) = do
     BComplete dag1 g -> do
       mrDebug $ "Handle BComplete from " ++ show i
       hrDag `eitherModifying` mergeThread dag1 >>= \case
-        Right () -> updateStateVal >> return MsgUpdate
+        Right () -> do
+          v' <- mrGetClock
+          hrDag `eitherModifying` updateClock rid v' >>= \case
+            Right () -> updateStateVal >> return MsgUpdate
+            Left MissingEvents -> error "Missing events after BComplete"
+            Left OldValues -> return MsgOld
+        -- Right () -> do updateClock rid (totalClock dag1)
+        --                updateStateVal
+        --                return MsgUpdate
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do
@@ -332,6 +378,28 @@ handleMsg (i,msg) = do
       g <- use hrCoord
       mrUnicast i $ BComplete dag g
       return MsgOld
+
+mrUpdateLive :: (MCS g) => Set RId -> MRepT g ()
+mrUpdateLive lv = do
+  lv' <- hrLiveNodes <%= Set.union lv
+  others <- mrOtherIds
+  mrDebug $ "Active nodes: " ++ show lv'
+  if Set.fromList others `Set.isSubsetOf` lv'
+     then do a <- view hrAllReady
+             liftIO.atomically $ tryPutTMVar a ()
+             return ()
+     else return ()
+
+mrCompareClock :: (MCS g) => MRepT g ()
+mrCompareClock = do
+  v1 <- mrGetClock
+  v2 <- use lastSentClock
+  dag <- use hrDag
+  mrDebug $ "Clock diff at " ++ show (aggDiff v1 v2)
+  mrDebug $ "Dag size at " ++ show (sizeVT dag)
+  if aggDiff v1 v2 >= 10
+     then mrBroadcast =<< mkPong
+     else return ()
 
 mrRequestAll :: (MCS g) => MRepT g ()
 mrRequestAll = do

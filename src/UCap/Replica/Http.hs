@@ -63,8 +63,8 @@ msgGetter chan debug request respond = do
       let src = fst tbm
           msg = snd tbm
       case msg of
-        BPing _ -> return ()
-        BPong _ -> return ()
+        BPing _ _ -> return ()
+        BPong _ _ -> return ()
         _ -> debug $ "RECV(" ++ src ++ ") " ++ show msg
       atomically (writeTChan chan tbm)
       respond $ responseLBS status200 [] ""
@@ -90,8 +90,8 @@ sendMsg man debug addrs src dst msg = do
                   Client.RequestBodyLBS $ encode (src,msg)
               }
   case msg of
-    BPing _ -> return ()
-    BPong _ -> return ()
+    BPing _ _ -> return ()
+    BPong _ _ -> return ()
     _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
   Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
     case e of

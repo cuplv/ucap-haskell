@@ -163,7 +163,7 @@ runDemo sets ops idlers = do
         (tq,ts) <- case Map.lookup rid trHandles of
                      Just (tq,ts,_) -> return (tq,ts)
                      Nothing -> (,) <$> newTChanIO <*> newTVarIO Map.empty
-        demoRep shutdown tq ts debug rid sets
+        demoRep shutdown undefined tq ts debug rid sets
 
   let forkFin rid = do
         let mv = fromJust $ Map.lookup rid sdConfirm
@@ -209,13 +209,14 @@ runDemo sets ops idlers = do
 demoRep
   :: (HttpCS g)
   => TMVar () -- ^ shutdown command input
+  -> TMVar () -- ^ All-ready notifier
   -> TChan (Int, Op' g) -- ^ Transaction queue
   -> TVar (Map Int TermStatus) -- ^ Termination records
   -> (String -> IO ()) -- ^ Debug action
   -> RId
   -> HRSettings g
   -> IO (Either () (), GState g)
-demoRep shutdown tq tstatus debug rid sets = do
+demoRep shutdown allReady tq tstatus debug rid sets = do
   inbox <- newTChanIO
   send <- mkSender debug (sets ^. hsAddrs)
   let port = case Map.lookup rid (sets ^. hsAddrs) of
@@ -231,6 +232,7 @@ demoRep shutdown tq tstatus debug rid sets = do
         , _hrShutdown = shutdown
         , _hrGetQueue = tq
         , _hrTermRecords = tstatus
+        , _hrAllReady = allReady
         }
   a <- evalMRepScript'
          (transactQueue debug)

@@ -33,9 +33,10 @@ main = do
   shutdown <- newEmptyTMVarIO -- termination control
   let runShutdown = atomically $ putTMVar shutdown ()
   confirm <- newEmptyTMVarIO -- termination confirmation
+  allReady <- newEmptyTMVarIO
 
   forkFinally
-    (demoRep shutdown tq ts debug rid sets)
+    (demoRep shutdown allReady tq ts debug rid sets)
     (\case
         Right (_,s) -> do
           debug $ "Terminated with state: " ++ show s
@@ -45,6 +46,9 @@ main = do
           atomically $ putTMVar confirm ())
 
   forkIO $ do
+    -- Block until all replicas are active
+    () <- atomically $ takeTMVar allReady
+    debug "allReady!"
     t <- getCurrentTime
     let h = (tq,ts,done)
     evalStateT
