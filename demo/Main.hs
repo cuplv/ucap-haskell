@@ -43,10 +43,16 @@ main = do
               "active" -> repeat (subOp 1 >>> pure ())
               s -> error $ "No role " ++ show s
 
-  dbg <- newTChanIO :: IO (TChan String) -- debug log
-  let debug s = if debugLvl config > 0
-                   then atomically . writeTChan dbg $ "=> " ++ s
-                   else return ()
+  dbchan <- if debugLvl config > 0
+               then Just <$> newTChanIO
+               else return Nothing
+  let debug s = case dbchan of
+                  Just c | debugLvl config >= 1 -> 
+                    atomically . writeTChan c $ "=> " ++ s
+                  _ -> return ()
+  -- let debug s = if debugLvl config > 0
+  --                  then atomically . writeTChan dbg $ "=> " ++ s
+  --                  else return ()
   tq <- newTChanIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
   done <- newEmptyTMVarIO -- termination notification
@@ -79,7 +85,7 @@ main = do
                      , _flsTrs = trs})
 
   debugLoop
-    dbg
+    dbchan
     (Map.singleton rid confirm)
     (Map.singleton rid done)
     runShutdown

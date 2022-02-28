@@ -130,20 +130,23 @@ feedLoop (tq,ts,done) conf = do
      else feedLoop (tq,ts,done) conf
 
 debugLoop
-  :: TChan String
+  :: Maybe (TChan String)
   -> Map RId (TMVar ())
   -> Map RId (TMVar ())
   -> IO ()
   -> IO ()
-debugLoop dbg sdConfirm trDone shutdown = do
-  r <- atomically $ (Debug <$> readTChan dbg)
+debugLoop dbchan sdConfirm trDone shutdown = do
+  let getDebug = case dbchan of
+                   Just c -> Debug <$> readTChan c
+                   Nothing -> retry
+  r <- atomically $ getDebug
                     `orElse` (const ScriptsDone
                               <$> mapM_ takeTMVar trDone)
                     `orElse` (const AllDone
                               <$> mapM_ takeTMVar sdConfirm)
   case r of
-    Debug s -> putStrLn s >> debugLoop dbg sdConfirm trDone shutdown
-    ScriptsDone -> shutdown >> debugLoop dbg sdConfirm trDone shutdown
+    Debug s -> putStrLn s >> debugLoop dbchan sdConfirm trDone shutdown
+    ScriptsDone -> shutdown >> debugLoop dbchan sdConfirm trDone shutdown
     AllDone -> return ()
 
 runDemo
@@ -213,7 +216,7 @@ runDemo sets ops idlers = do
   mapM_ (forkIO . forkFeeder) ops
 
   let runShutdown = atomically $ mapM_ (\m -> putTMVar m ()) sdHandles
-  debugLoop dbg sdConfirm (Map.map (view _3) trHandles) runShutdown
+  debugLoop (Just dbg) sdConfirm (Map.map (view _3) trHandles) runShutdown
 
 demoRep
   :: (HttpCS g)
