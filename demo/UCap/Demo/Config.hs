@@ -18,6 +18,7 @@ data Config
            , exprSettings :: ExConf
            , localId :: String
            , repRole :: String
+           , debugLvl :: Int
            }
 
 type LG = TokenG String IntC
@@ -33,6 +34,7 @@ dConfig = record $ Config
   <*> field "experiment" dExConf
   <*> field "id" string
   <*> field "role" string
+  <*> (fromIntegral <$> field "debug" natural)
 
 dExConf :: Decoder ExConf
 dExConf = record $ ExConf

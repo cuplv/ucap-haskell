@@ -87,11 +87,9 @@ lockDemo = do
   runDemo sets scripts daemons
 
 data ExConf
-  = ExConf { exConfRate :: Int -- ^ Transactions per millisecond
+  = ExConf { exConfRate :: Double -- ^ Transactions per second
            , exConfDuration :: NominalDiffTime
            }
-
-burst (ExConf r d) = r
 
 data DebugLoop
   = Debug String
@@ -100,22 +98,33 @@ data DebugLoop
 
 
 feedLoop
-  :: (TChan (Int, a), TVar (Map Int TermStatus), TMVar ())
+  :: (TChan (Int, a), TVar (Map Int UTCTime), TMVar ())
   -> ExConf
   -> StateT (FeedLoopState a) IO ()
 feedLoop (tq,ts,done) conf = do
   idx <- use flsIndex
+  t0 <- use flsStartTime
+  t <- liftIO getCurrentTime
+  let secElapsed = nominalDiffTimeToSeconds $ diffUTCTime t t0
+  let newIdx = floor (toRational (exConfRate conf) * toRational secElapsed)
+  let burst = newIdx - idx
+  let tids = [idx..(newIdx - 1)]
   trs <- use flsTrs
-  let (now,later) = List.splitAt (burst conf) trs
-  flsIndex += burst conf
+  let (now,later) = List.splitAt burst trs
+  if length tids /= burst
+     then error $ "feeder index update error: "
+                  ++ show tids ++ " vs. " ++ show burst
+                  ++ " and " ++ show newIdx ++ " vs. " ++ show idx
+     else return ()
+  flsIndex .= newIdx
   flsTrs .= later
 
-  liftIO . atomically $ mapM_ (writeTChan tq) (zip [idx..] now)
+  liftIO.atomically $ modifyTVar ts (<> Map.fromList (zip tids $ repeat t))
+  liftIO . atomically $ mapM_ (writeTChan tq) (zip tids now)
   liftIO $ threadDelay 1000
 
-  t0 <- use flsStartTime
-  t <- liftIO  getCurrentTime
-  if addUTCTime (exConfDuration conf) t0 <= t
+  t2 <- liftIO getCurrentTime
+  if addUTCTime (exConfDuration conf) t0 <= t2
      then do liftIO . atomically $ putTMVar done ()
              return ()
      else feedLoop (tq,ts,done) conf
@@ -173,7 +182,7 @@ runDemo sets ops idlers = do
                 ++ show (sets ^. hsInitState)
               runRep rid)
           (\case
-              Right (Right (),s) -> atomically $ do
+              Right (Right ((),d),s) -> atomically $ do
                 writeTChan dbg $ "[+] " ++ rid ++ " returned,"
                                  ++ " with state " ++ show s
                 putTMVar mv ()
@@ -211,11 +220,11 @@ demoRep
   => TMVar () -- ^ shutdown command input
   -> TMVar () -- ^ All-ready notifier
   -> TChan (Int, Op' g) -- ^ Transaction queue
-  -> TVar (Map Int TermStatus) -- ^ Termination records
+  -> TVar (Map Int UTCTime) -- ^ Transaction start times
   -> (String -> IO ()) -- ^ Debug action
   -> RId
   -> HRSettings g
-  -> IO (Either () (), GState g)
+  -> IO (Either () ((), ExprData), GState g)
 demoRep shutdown allReady tq tstatus debug rid sets = do
   inbox <- newTChanIO
   send <- mkSender debug (sets ^. hsAddrs)
@@ -231,7 +240,7 @@ demoRep shutdown allReady tq tstatus debug rid sets = do
         , _hrDebug = debug
         , _hrShutdown = shutdown
         , _hrGetQueue = tq
-        , _hrTermRecords = tstatus
+        , _hrTrStart = tstatus
         , _hrAllReady = allReady
         }
   a <- evalMRepScript'

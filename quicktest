@@ -1,0 +1,5 @@
+BIN=./dist-newstyle/build/x86_64-linux/ghc-8.10.7/ucap-0.1.0.0/x/ucap-demo/build/ucap-demo/ucap-demo
+
+CONFIG=./example/settings.dhall
+
+$BIN "$CONFIG \"$1\" \"$2\""

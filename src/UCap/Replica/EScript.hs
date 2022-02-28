@@ -13,7 +13,7 @@ module UCap.Replica.EScript
   , transactQueue
   , ExWr (..)
   , ExRd (..)
-  , TermStatus
+  , TermStatus (..)
   , liftEScript
   , module Lang.Rwa
   , module Lang.Rwa.Interpret

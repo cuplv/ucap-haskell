@@ -18,6 +18,7 @@ module UCap.Replica.MRep
   , evalMRepScript
   , evalMRepScript'
   , Op'
+  , ExprData
   ) where
 
 import Lang.Rwa
@@ -37,9 +38,11 @@ import Control.Monad.Trans (liftIO)
 import Data.Aeson hiding ((.=))
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import qualified Data.List as List
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time.Clock
 import GHC.Generics
 
 type RId = String
@@ -86,6 +89,7 @@ data MRepState g e s
               , _hrQueue :: Map Int (Op' g)
               , _lastSentClock :: VC
               , _hrLiveNodes :: Set RId
+              , _hrTrFinish :: Map Int UTCTime
               }
 
 type Op' g = Op (GCap g) IO () ()
@@ -103,7 +107,7 @@ data MRepInfo g e
              , _hrDebug :: String -> IO ()
              , _hrShutdown :: TMVar ()
              , _hrGetQueue :: TChan (Int, Op' g)
-             , _hrTermRecords :: TVar (Map Int TermStatus)
+             , _hrTrStart :: TVar (Map Int UTCTime)
              , _hrAllReady :: TMVar ()
              }
 
@@ -139,9 +143,11 @@ evalMRepScript
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
-  -> IO (Either () a)
+  -> IO (Either () (a, ExprData))
 evalMRepScript sc s0 g0 info =
   fst <$> evalMRepScript' sc s0 g0 info
+
+type ExprData = (Map Int UTCTime, Map Int UTCTime)
 
 evalMRepScript'
   :: (MCS g)
@@ -149,7 +155,7 @@ evalMRepScript'
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
-  -> IO (Either () a,GState g)
+  -> IO (Either () (a, ExprData),GState g)
 evalMRepScript' sc s0 g0 info =
   let st = MRepState { _hrInitState = s0
                      , _hrCurrentState = s0
@@ -160,13 +166,16 @@ evalMRepScript' sc s0 g0 info =
                      , _hrQueue = Map.empty
                      , _lastSentClock = zeroClock
                      , _hrLiveNodes = Set.singleton (info^.hrId)
+                     , _hrTrFinish = Map.empty
                      }
       m = do mrPing
              -- In case effects have been missed due to slow start-up,
              -- we request a complete copy of the state from all
              -- listening peers.
              mrRequestAll
-             mrAwaitScript sc
+             a <- mrAwaitScript sc
+             d <- mrCollectData
+             return (a,d)
   in do (a,m) <- runMRep m st info
         return (a, m ^. hrCurrentState)
 
@@ -223,9 +232,13 @@ mrWriteState (ExWr (RepCtx e mg) trm rc) = do
   mapM_ (\i -> hrQueue %= Map.delete i) rc
   mrDebug $ show rc
   if not $ null trm
-     then do mrDebug $ show trm
-             tv <- view hrTermRecords
-             liftIO $ atomically $ modifyTVar tv (<> Map.fromList trm)
+     then do t <- liftIO getCurrentTime
+             let f (i,TermComplete) = hrTrFinish %= Map.insert i t
+             mapM_ f trm
+             -- tv <- view hrTermRecords
+             -- let f m = Map.unionWith (<>) m (Map.fromList trm)
+             -- liftIO $ atomically $ modifyTVar tv f
+             mrDebug $ show trm
      else return ()
 
   rid <- view hrId
@@ -406,9 +419,17 @@ mrRequestAll = do
   rid <- view hrId
   mrBroadcast BRequest
 
+mrCollectData :: (MCS g) => MRepT g ExprData
+mrCollectData = do
+  ss <- liftIO . readTVarIO =<< view hrTrStart
+  fs <- use hrTrFinish
+  return (ss,fs)
+
 mrAwaitScript :: (MCS g) => EScriptT g a -> MRepT g a
 mrAwaitScript sc = mrScript sc >>= \case
-  Right a -> return a
+  Right a -> do
+    -- mrPrintReport
+    return a
   Left b -> mrTryAwait b >>= \case
     Just sc' -> mrCheckChange >> mrAwaitScript sc'
     Nothing -> mrWaitChange >> mrAwaitScript (await b)

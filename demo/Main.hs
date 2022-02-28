@@ -3,14 +3,32 @@
 import UCap.Demo.Config
 import UCap.Lens
 import UCap.Op
+import UCap.Replica.MRep
 import UCap.Replica.HttpDemo
 
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.State
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Data.Time.Clock
 import System.Environment (getArgs)
+
+mkReport :: Config -> ExprData -> String
+mkReport conf (ss,fs) =
+  let total = Map.size fs
+      thp = 
+        fromIntegral total
+        / nominalDiffTimeToSeconds (exConfDuration $ exprSettings conf)
+      latn = Map.foldlWithKey f 0 fs * fromIntegral 1000
+        where f t k end =
+                let start = fromJust $ Map.lookup k ss
+                    tk = nominalDiffTimeToSeconds (diffUTCTime end start)
+                         / fromIntegral total
+                in t + tk
+  in "Total: " ++ show total ++ " tr\n"
+     ++ "Throughput: " ++ show thp ++ " tr/s\n"
+     ++ "Avg. latency: " ++ show latn ++ " ms"
 
 main :: IO ()
 main = do
@@ -26,7 +44,9 @@ main = do
               s -> error $ "No role " ++ show s
 
   dbg <- newTChanIO :: IO (TChan String) -- debug log
-  let debug s = atomically . writeTChan dbg $ "=> " ++ s
+  let debug s = if debugLvl config > 0
+                   then atomically . writeTChan dbg $ "=> " ++ s
+                   else return ()
   tq <- newTChanIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
   done <- newEmptyTMVarIO -- termination notification
@@ -38,8 +58,9 @@ main = do
   forkFinally
     (demoRep shutdown allReady tq ts debug rid sets)
     (\case
-        Right (_,s) -> do
+        Right (Right (_,d),s) -> do
           debug $ "Terminated with state: " ++ show s
+          putStr $ mkReport config d
           atomically $ putTMVar confirm ()
         Left e -> do
           debug (show e)
