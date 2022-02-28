@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
+import UCap.Coord
 import UCap.Demo.Config
 import UCap.Lens
 import UCap.Op
@@ -14,12 +15,12 @@ import Data.Maybe (fromJust)
 import Data.Time.Clock
 import System.Environment (getArgs)
 
-mkReport :: Config -> ExprData -> String
+mkReport :: ExConf -> ExprData -> String
 mkReport conf (ss,fs) =
   let total = Map.size fs
       thp = 
         fromIntegral total
-        / nominalDiffTimeToSeconds (exConfDuration $ exprSettings conf)
+        / nominalDiffTimeToSeconds (exConfDuration conf)
       latn = Map.foldlWithKey f 0 fs * fromIntegral 1000
         where f t k end =
                 let start = fromJust $ Map.lookup k ss
@@ -33,21 +34,26 @@ mkReport conf (ss,fs) =
 main :: IO ()
 main = do
   args <- getArgs
-  config <- inputConfig (head args)
-  let sets = commonSettings config
-      exconf = exprSettings config
-      rid = localId config
+  (gc,lc) <- case args of
+               [gc,lc] -> (,) <$> dhallInput (dGlobalConfig dSimpleEx) gc
+                              <*> dhallInput dLocalConfig lc
+  -- config <- inputConfig (head args)
+  let exconf = gcExConf gc
+      rid = lcId lc
+      addrs = gcNetwork gc
+      trs = case gcExSetup gc of
+              TokenEx _ -> repeat $ subOp 1 >>> pure ()
 
-  let trs = case repRole config of
-              "idle" -> []
-              "active" -> repeat (subOp 1 >>> pure ())
-              s -> error $ "No role " ++ show s
+  -- let trs = case repRole config of
+  --             "idle" -> []
+  --             "active" -> repeat (subOp 1 >>> pure ())
+  --             s -> error $ "No role " ++ show s
 
-  dbchan <- if debugLvl config > 0
+  dbchan <- if lcDebug lc > 0
                then Just <$> newTChanIO
                else return Nothing
   let debug s = case dbchan of
-                  Just c | debugLvl config >= 1 -> 
+                  Just c | lcDebug lc >= 1 -> 
                     atomically . writeTChan c $ "=> " ++ s
                   _ -> return ()
   -- let debug s = if debugLvl config > 0
@@ -62,11 +68,13 @@ main = do
   allReady <- newEmptyTMVarIO
 
   forkFinally
-    (demoRep shutdown allReady tq ts debug rid sets)
+    (let run = demoRep shutdown allReady tq ts debug rid
+     in case gcExSetup gc of
+          TokenEx i -> run $ HRSettings addrs (100::Int) (mkTokenG i))
     (\case
         Right (Right (_,d),s) -> do
           debug $ "Terminated with state: " ++ show s
-          putStr $ mkReport config d
+          putStr $ mkReport (gcExConf gc) d
           atomically $ putTMVar confirm ()
         Left e -> do
           debug (show e)
