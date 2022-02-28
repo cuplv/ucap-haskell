@@ -19,15 +19,6 @@ import Data.Text (pack)
 import Data.Time.Clock
 import Dhall
 
--- data Config
---   = Config { exprSettings :: ExConf
---            , localId :: String
---            , repRole :: Role
---            , debugLvl :: Int
---            , exprType :: ExperimentType
---            , network :: Addrs
---            }
-
 data GlobalConfig e
   = GlobalConfig { gcNetwork :: Addrs
                  , gcExConf :: ExConf
@@ -61,6 +52,9 @@ dSimpleEx :: Decoder SimpleEx
 dSimpleEx = union $
   (TokenEx
      <$> constructor "Token" (record $ field "initOwner" string))
+  <> (constructor "Escrow" . record $ EscrowEx
+        <$> field "initOwner" string
+        <*> (fromIntegral <$> field "amount" natural))
 
 type LG = TokenG String IntC
 
@@ -68,31 +62,6 @@ type EG = IntEscrow String
 
 dhallInput :: Decoder a -> String -> IO a
 dhallInput d = input d . pack
-
--- inputConfig :: FilePath -> IO Config
--- inputConfig = input dConfig . pack
-
--- dConfig :: Decoder Config
--- dConfig = record $ Config
---   <$> field "network" dCommon
---   <*> field "experiment" dExConf
---   <*> field "id" string
---   <*> field "role" string
---   <*> (fromIntegral <$> field "debug" natural)
---   <*> field "exprType" _
---   <*> field "network"
-
--- dExConf :: Decoder ExConf
--- dExConf = record $ ExConf
---   <$> (fromIntegral <$> field "rate" natural)
---   <*> (secondsToNominalDiffTime . fromIntegral
---        <$> field "duration" natural)
-
--- dCommon :: Decoder (HRSettings LG)
--- dCommon = record $ HRSettings
---   <$> field "addresses" (Dhall.map string dAddr)
---   <*> field "initState" int
---   <*> (mkTokenG <$> field "initOwner" string)
 
 dAddr :: Decoder (String,Int)
 dAddr = record $ (,)

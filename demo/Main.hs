@@ -37,17 +37,11 @@ main = do
   (gc,lc) <- case args of
                [gc,lc] -> (,) <$> dhallInput (dGlobalConfig dSimpleEx) gc
                               <*> dhallInput dLocalConfig lc
-  -- config <- inputConfig (head args)
   let exconf = gcExConf gc
       rid = lcId lc
       addrs = gcNetwork gc
       trs = case gcExSetup gc of
-              TokenEx _ -> repeat $ subOp 1 >>> pure ()
-
-  -- let trs = case repRole config of
-  --             "idle" -> []
-  --             "active" -> repeat (subOp 1 >>> pure ())
-  --             s -> error $ "No role " ++ show s
+              _ -> repeat $ subOp 1 >>> pure ()
 
   dbchan <- if lcDebug lc > 0
                then Just <$> newTChanIO
@@ -56,9 +50,7 @@ main = do
                   Just c | lcDebug lc >= 1 -> 
                     atomically . writeTChan c $ "=> " ++ s
                   _ -> return ()
-  -- let debug s = if debugLvl config > 0
-  --                  then atomically . writeTChan dbg $ "=> " ++ s
-  --                  else return ()
+
   tq <- newTChanIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
   done <- newEmptyTMVarIO -- termination notification
@@ -68,9 +60,14 @@ main = do
   allReady <- newEmptyTMVarIO
 
   forkFinally
-    (let run = demoRep shutdown allReady tq ts debug rid
-     in case gcExSetup gc of
-          TokenEx i -> run $ HRSettings addrs (100::Int) (mkTokenG i))
+    (case gcExSetup gc of
+        TokenEx i -> demoRep shutdown allReady tq ts debug rid $ 
+                       HRSettings addrs (100::Int) (mkTokenG i)
+        EscrowEx i n -> 
+          let g = initIntEscrow [i] $ Map.fromList [(i,(n,0))]
+          in demoRep shutdown allReady tq ts debug rid $ 
+               HRSettings addrs n g)
+
     (\case
         Right (Right (_,d),s) -> do
           debug $ "Terminated with state: " ++ show s
