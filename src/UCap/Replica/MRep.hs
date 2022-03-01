@@ -316,14 +316,17 @@ mkPong = do
 mrGetClock :: (MCS g) => MRepT g VC
 mrGetClock = totalClock <$> use hrDag
 
-hrClearWaiting :: (MCS g) => MRepT g ()
-hrClearWaiting = do
+mrClearWaiting :: (MCS g) => MRepT g ()
+mrClearWaiting = do
   ms <- use hrMsgWaiting
   let f ms msg = handleMsg msg >>= \case
                    MsgNonCausal -> return $ ms ++ [msg]
                    _ -> return ms
   ms' <- foldM f [] ms
   hrMsgWaiting .= ms'
+  if length ms' /= length ms
+     then mrClearWaiting
+     else return ()
 
 data MsgResult
   = MsgUpdate -- ^ A change has been made
@@ -335,7 +338,7 @@ handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
-      mrDebug $ "Handle BNewEffect from " ++ show i
+      mrDebug $ "Handle BNewEffect from " ++ show i ++ " " ++ show v
       let tryImport d = observe rid i <$> eventImport' i (v,e) d
       hrDag `eitherModifying` tryImport >>= \case
         Right () -> do updateStateVal
@@ -439,7 +442,14 @@ mrCheckChange = do
   chan <- view hrInbox
   m <- liftIO . atomically $ tryReadTChan chan
   case m of
-    Just msg -> handleMsg msg >> mrPrune
+    Just msg -> handleMsg msg >>= \case
+      MsgUpdate -> mrClearWaiting >> mrPrune
+      MsgOld -> return ()
+      MsgNonCausal -> do
+        hrMsgWaiting %= (++ [msg])
+        w <- use hrMsgWaiting
+        mrDebug $ "Msgs waiting: " ++ show (length w)
+        return ()
     Nothing -> return ()
 
 data MrChange g e
@@ -459,7 +469,7 @@ mrWaitChange = do
   cmd <- liftIO . atomically $ stm
   case cmd of
     MrGotMsg msg -> handleMsg msg >>= \case
-      MsgUpdate -> mrPrune
+      MsgUpdate -> mrClearWaiting >> mrPrune
       MsgOld -> mrWaitChange
       MsgNonCausal -> do
         hrMsgWaiting %= (++ [msg])
