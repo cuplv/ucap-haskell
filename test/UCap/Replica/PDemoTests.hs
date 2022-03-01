@@ -225,21 +225,21 @@ misc = testGroup "Misc" $
   ]
 
 escSys1 :: IntEscrow String
-escSys1 = initIntEscrow ["A"] $ Map.fromList
+escSys1 = initIntEscrow 1 ["A"] $ Map.fromList
   [("A",(0,102))
   ,("B",(0,3))
   ,("C",(0,2))
   ]
 
 escSys2 :: IntEscrow String
-escSys2 = initIntEscrow ["A"] $ Map.fromList
+escSys2 = initIntEscrow 1 ["A"] $ Map.fromList
   [("A",(0,102))
   ,("B",(0,3))
   ,("C",(0,0))
   ]
 
 escSys3 :: IntEscrow String
-escSys3 = initIntEscrow ["A"] $ Map.fromList
+escSys3 = initIntEscrow 1 ["A"] $ Map.fromList
   [("A",(0,102))
   ,("B",(0,3))
   ]
@@ -314,11 +314,9 @@ tescrow = testGroup "Escrow" $
                 (Map.fromList [("A",32), ("B",73), ("C",2)])
      in escrowAccept "B" e1 @?= e1
   ,testCase "Escrow read" $
-     let g = IntEscrow
-           { addEscrow = IncEscrow mempty
-           , subEscrow = DecEscrow . IncEscrow $ 
-               initEscrow [] [] (Map.fromList [("A",subA),("B",subB)])
-           }
+     let g :: IntEscrow String
+         g = initIntEscrow 1 [] $ Map.fromList
+                                    [("A",(subA,0)),("B",(subB,0))]
          subA = 8
          subB = 46
          s0 = 4

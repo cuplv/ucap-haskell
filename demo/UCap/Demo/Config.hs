@@ -54,7 +54,7 @@ dLocalConfig = record $ LocalConfig
 
 data SimpleEx
   = TokenEx { initOwner :: String }
-  | EscrowEx { initOwner :: String, amount :: Int }
+  | EscrowEx { initOwner :: String, amount :: Int, bfactor :: Int }
 
 dSimpleEx :: Decoder SimpleEx
 dSimpleEx = union $
@@ -62,7 +62,8 @@ dSimpleEx = union $
      <$> constructor "Token" (record $ field "initOwner" string))
   <> (constructor "Escrow" . record $ EscrowEx
         <$> field "initOwner" string
-        <*> (fromIntegral <$> field "amount" natural))
+        <*> (fromIntegral <$> field "amount" natural)
+        <*> (fromIntegral <$> field "bufferFactor" natural))
 
 type LG = TokenG String IntC
 

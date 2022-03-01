@@ -1,7 +1,4 @@
-let Ex =
-      < Token : { initOwner : Text }
-      | Escrow : { initOwner : Text, amount : Natural }
-      >
+let ex = ./experiment.dhall
 
 let replicas =
       { alpha = { host = "localhost", port = 8090 }
@@ -9,8 +6,4 @@ let replicas =
       , gamma = { host = "localhost", port = 8092 }
       }
 
-in  { network = toMap replicas
-    , rate = 50.0
-    , duration = 10
-    , setup = Ex.Escrow { initOwner = "alpha", amount = 20000 }
-    }
+in  { network = toMap replicas, rate = 200.0, duration = 4, setup = ex.escrow }

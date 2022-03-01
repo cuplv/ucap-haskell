@@ -64,7 +64,7 @@ escrowDemo = do
   let sets = HRSettings
         { _hsAddrs = addrMap
         , _hsInitState = 100000
-        , _hsInitCoord = initIntEscrow [alphaId] $ Map.fromList
+        , _hsInitCoord = initIntEscrow 1 [alphaId] $ Map.fromList
             [(alphaId, (100000,0))
             ]
         }

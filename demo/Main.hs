@@ -66,8 +66,8 @@ main = do
     (case gcExSetup gc of
         TokenEx i -> demoRep shutdown allReady tq ts debug rid $ 
                        HRSettings addrs (100::Int) (mkTokenG i)
-        EscrowEx i n -> 
-          let g = initIntEscrow [i] $ Map.fromList [(i,(n,0))]
+        EscrowEx i n b ->
+          let g = initIntEscrow b [i] $ Map.fromList [(i,(n,0))]
           in demoRep shutdown allReady tq ts debug rid $ 
                HRSettings addrs n g)
 

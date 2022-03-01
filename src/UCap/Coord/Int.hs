@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module UCap.Coord.Int where
+module UCap.Coord.Int
+  ( IntEscrow
+  , initIntEscrow
+  ) where
 
 import UCap.Coord.Classes
 import UCap.Domain.Classes
@@ -16,41 +19,45 @@ import qualified Data.Map as Map
 import GHC.Generics
 
 data IncEscrow i
-  = IncEscrow (EscrowIntPool i)
+  = IncEscrow { ieBufferFactor :: Int
+              , iePool :: EscrowIntPool i
+              }
   deriving (Show,Eq,Ord,Generic)
 
 instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IncEscrow i)
 instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IncEscrow i)
 
 instance (Ord i) => Semigroup (IncEscrow i) where
-  IncEscrow a <> IncEscrow b = IncEscrow (a <> b)
+  IncEscrow bf a <> IncEscrow _ b = IncEscrow bf (a <> b)
 
 instance (Ord i) => CoordSys (IncEscrow i) where
   type GCap (IncEscrow i) = IncC
   type GId (IncEscrow i) = i
-  resolveCaps i cs (IncEscrow g) =
+  resolveCaps i cs (IncEscrow bf g) =
     case incBound . capsWrite $ cs of
       Just wn | wn <= owned -> 
                 case incBound . capsRead $ cs of
                   Just _ -> Right $ incE unowned
                   Nothing -> Right $ idE
-              | otherwise -> 
-                Left $ IncEscrow <$> escrowRequest' i (wn - owned) g
+              | otherwise ->
+                let amt = (wn - owned) * bf -- overrequest by buffer-factor
+                in Left $ IncEscrow bf <$> escrowRequest' i amt g
       Nothing -> Left Nothing
     where owned = escrowOwned i g
           unowned = escrowUnowned i g
-  resolveEffect i e (IncEscrow g) = bimap incC IncEscrow $
+  resolveEffect i e (IncEscrow bf g) = bimap incC (IncEscrow bf) $
     escrowUse i (intOffset e) g
-  localCaps i (IncEscrow g) =
+  localCaps i (IncEscrow _ g) =
     incC <$> Caps { capsRead = escrowUnowned i g
                   , capsWrite = escrowOwned i g
                   }
-  undoEffect i e (IncEscrow g) = IncEscrow $ escrowAdd i (intOffset e) g
-  grantRequests i (IncEscrow g) = IncEscrow <$> escrowHandleReqs i g
-  acceptGrants i (IncEscrow g) =
+  undoEffect i e (IncEscrow bf g) =
+    IncEscrow bf $ escrowAdd i (intOffset e) g
+  grantRequests i (IncEscrow bf g) = IncEscrow bf <$> escrowHandleReqs i g
+  acceptGrants i (IncEscrow bf g) =
     let g' = escrowAccept i g
     in if g /= g'
-          then Just $ IncEscrow g'
+          then Just $ IncEscrow bf g'
           else Nothing
 
 data DecEscrow i
@@ -85,7 +92,7 @@ instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IntEscrow i)
 instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IntEscrow i)
 
 instance (Ord i, Show i) => Show (IntEscrow i) where
-  show e@(IntEscrow (IncEscrow a) (DecEscrow (IncEscrow s))) =
+  show e@(IntEscrow (IncEscrow _ a) (DecEscrow (IncEscrow _ s))) =
     let ks = nub $ escrowOwners a ++ escrowOwners s
         caps = map (\k -> (k,capsWrite $ localCaps k e)) ks
     in show caps
@@ -123,11 +130,28 @@ instance (Ord i) => CoordSys (IntEscrow i) where
       <<*>> (eitherToWF a . j2l $ acceptGrants i a)
       <<*>> (eitherToWF s . j2l $ acceptGrants i s)
 
-initIntEscrow :: (Ord i) => [i] -> Map i (Int,Int) -> IntEscrow i
-initIntEscrow sources m = IntEscrow
-  { addEscrow = IncEscrow $
+
+{-| Create the initial state of an 'IntEscrow' coordination system.
+
+  The buffer factor controls the size of requests.  With a factor of
+  @1@, requests are made for only what is immediately needed.  A
+  factor of @3@ triples request size, covering three transactions in
+  one request.  The buffer factor must be @>= 1@.
+
+  Resources are always requested from a "source peer".  Currently,
+  they are only requested from the first source peer given.  If no
+  source peers are given, resources cannot be requested.
+-}
+initIntEscrow
+  :: (Ord i)
+  => Int -- ^ Buffer factor
+  -> [i] -- ^ Source peers
+  -> Map i (Int,Int) -- ^ Initial holdings
+  -> IntEscrow i
+initIntEscrow 0 _ _ = error "Buffer factor is 0, must be >= 1"
+initIntEscrow bf sources m = IntEscrow
+  { addEscrow = IncEscrow bf $
                 initEscrow sources [] (Map.map snd m)
-  , subEscrow = DecEscrow . IncEscrow $
+  , subEscrow = DecEscrow . IncEscrow bf $
                 initEscrow sources [] (Map.map fst m)
   }
-  
