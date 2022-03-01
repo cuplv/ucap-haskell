@@ -100,13 +100,15 @@ data DebugLoop
 feedLoop
   :: (TChan (Int, a), TVar (Map Int UTCTime), TMVar ())
   -> ExConf
+  -> Int
   -> StateT (FeedLoopState a) IO ()
-feedLoop (tq,ts,done) conf = do
+feedLoop (tq,ts,done) conf peerCount = do
   idx <- use flsIndex
   t0 <- use flsStartTime
   t <- liftIO getCurrentTime
+  let peerRate = exConfRate conf / fromIntegral peerCount
   let secElapsed = nominalDiffTimeToSeconds $ diffUTCTime t t0
-  let newIdx = floor (toRational (exConfRate conf) * toRational secElapsed)
+  let newIdx = floor (toRational peerRate * toRational secElapsed)
   let burst = newIdx - idx
   let tids = [idx..(newIdx - 1)]
   trs <- use flsTrs
@@ -127,7 +129,7 @@ feedLoop (tq,ts,done) conf = do
   if addUTCTime (exConfDuration conf) t0 <= t2
      then do liftIO . atomically $ putTMVar done ()
              return ()
-     else feedLoop (tq,ts,done) conf
+     else feedLoop (tq,ts,done) conf peerCount
 
 debugLoop
   :: Maybe (TChan String)
@@ -206,7 +208,7 @@ runDemo sets ops idlers = do
               , exConfDuration = secondsToNominalDiffTime 5
               }
         t <- getCurrentTime
-        evalStateT (feedLoop h conf)
+        evalStateT (feedLoop h conf 3)
           (FeedLoopState
              { _flsStartTime = t
              , _flsIndex = 0

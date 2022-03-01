@@ -7,6 +7,8 @@ module UCap.Demo.Config
   , dLocalConfig
   , SimpleEx (..)
   , dSimpleEx
+  , CombinedConfig
+  , dCombinedConfig
   , dhallInput
   ) where
 
@@ -18,6 +20,12 @@ import UCap.Replica.MRep (Addrs,RId)
 import Data.Text (pack)
 import Data.Time.Clock
 import Dhall
+
+type CombinedConfig e = (GlobalConfig e, LocalConfig)
+
+dCombinedConfig d = record $ (,)
+  <$> field "global" (dGlobalConfig d)
+  <*> field "local" dLocalConfig
 
 data GlobalConfig e
   = GlobalConfig { gcNetwork :: Addrs

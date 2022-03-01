@@ -37,6 +37,9 @@ main = do
   (gc,lc) <- case args of
                [gc,lc] -> (,) <$> dhallInput (dGlobalConfig dSimpleEx) gc
                               <*> dhallInput dLocalConfig lc
+               [cc] -> dhallInput (dCombinedConfig dSimpleEx) cc
+               _ -> error $ "Must call with 2 args (global, local) \
+                            \or 1 arg (combined)"
   let exconf = gcExConf gc
       rid = lcId lc
       addrs = gcNetwork gc
@@ -84,7 +87,7 @@ main = do
     t <- getCurrentTime
     let h = (tq,ts,done)
     evalStateT
-      (feedLoop h exconf)
+      (feedLoop h exconf (Map.size addrs))
       (FeedLoopState { _flsStartTime = t
                      , _flsIndex = 0
                      , _flsTrs = trs})
