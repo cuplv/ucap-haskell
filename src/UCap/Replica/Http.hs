@@ -65,10 +65,14 @@ msgGetter chan debug request respond = do
       case msg of
         BPing _ _ -> return ()
         BPong _ _ -> return ()
-        -- BCoord _ _ -> return ()
         _ -> debug $ "RECV(" ++ src ++ ") " ++ show msg
+
+      -- Complete HTTP response before sending msg to the main loop.
+      -- The main loop may terminate when it receives the message,
+      -- which could interrupt an incomplete response.
+      r <- respond $ responseLBS status200 [] ""
       atomically (writeTChan chan tbm)
-      respond $ responseLBS status200 [] ""
+      return r
     Nothing -> respond $ responseLBS status400 [] ""
 
 sendMsg
@@ -93,7 +97,6 @@ sendMsg man debug addrs src dst msg = do
   case msg of
     BPing _ _ -> return ()
     BPong _ _ -> return ()
-    -- BCoord _ _ -> return ()
     _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
   Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
     case e of

@@ -47,12 +47,38 @@ import GHC.Generics
 
 type RId = String
 
+data PeerStatus
+  = PeerStatus (Map RId Bool)
+  deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON PeerStatus
+instance FromJSON PeerStatus
+
+instance Semigroup PeerStatus where
+  PeerStatus m1 <> PeerStatus m2 = PeerStatus $ Map.unionWith (&&) m1 m2
+
+allReady :: [RId] -> PeerStatus -> Bool
+allReady is (PeerStatus m) = and $ map (`Map.member` m) is
+
+allFinished :: [RId] -> PeerStatus -> Bool
+allFinished is (PeerStatus m) = and $
+  map (\k -> Map.lookup k m == Just False) is
+
+initReady :: RId -> PeerStatus
+initReady i = PeerStatus $ Map.singleton i True
+
+setReady :: RId -> PeerStatus -> PeerStatus
+setReady i (PeerStatus m) = PeerStatus $ Map.insert i True m
+
+setFinished :: RId -> PeerStatus -> PeerStatus
+setFinished i (PeerStatus m) = PeerStatus $ Map.insert i False m
+
 class (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
 instance (GId g ~ RId, Eq g, Eq (GEffect g), CoordSys g, Show g) => MCS g
 
 data BMsg g e
-  = BPing (Set RId) VC
-  | BPong (Set RId) VC
+  = BPing PeerStatus VC
+  | BPong PeerStatus VC
   | BNewEffect VC e g
   | BCoord VC g
   | BComplete (VThread String e) g
@@ -85,10 +111,9 @@ data MRepState g e s
               , _hrCoord :: g
               , _hrDag :: VThread RId e
               , _hrMsgWaiting :: [TBM g e]
-              , _hrShutdownActive :: Bool
               , _hrQueue :: Map Int (Op' g)
               , _lastSentClock :: VC
-              , _hrLiveNodes :: Set RId
+              , _hrLiveNodes :: PeerStatus
               , _hrTrFinish :: Map Int UTCTime
               }
 
@@ -129,6 +154,18 @@ mrOtherIds = do
   ids <- Map.keys <$> view hrAddrs
   return $ List.delete rid ids
 
+mrAllReady :: MRepT g Bool
+mrAllReady = do
+  ids <- Map.keys <$> view hrAddrs
+  pstat <- use hrLiveNodes
+  return $ allReady ids pstat
+
+mrAllFinished :: MRepT g Bool
+mrAllFinished = do
+  ids <- Map.keys <$> view hrAddrs
+  pstat <- use hrLiveNodes
+  return $ allFinished ids pstat
+
 runMRep
   :: (MCS g)
   => MRepT g a
@@ -162,10 +199,9 @@ evalMRepScript' sc s0 g0 info =
                      , _hrCoord = g0
                      , _hrDag = initThreads
                      , _hrMsgWaiting = []
-                     , _hrShutdownActive = False
                      , _hrQueue = Map.empty
                      , _lastSentClock = zeroClock
-                     , _hrLiveNodes = Set.singleton (info^.hrId)
+                     , _hrLiveNodes = initReady (info^.hrId)
                      , _hrTrFinish = Map.empty
                      }
       m = do mrPing
@@ -218,13 +254,13 @@ mrTryAwait b = do
 mrReadState :: (MCS g) => MRepT g (ExRd g (GState g))
 mrReadState = do
   ctx <- RepCtx <$> use hrCurrentState <*> use hrCoord
-  sd <- use hrShutdownActive
   q <- use hrQueue
+  finished <- mrAllFinished
   mrDebug $ "Passing along " ++ show (length q) ++ " trs."
   return $ ExRd
     { _exrStore = ctx
     , _exrQueue = q
-    , _exrShutdown = sd
+    , _exrShutdown = finished
     }
 
 mrWriteState :: (MCS g) => ExWr g (GEffect g) -> MRepT g ()
@@ -235,9 +271,6 @@ mrWriteState (ExWr (RepCtx e mg) trm rc) = do
      then do t <- liftIO getCurrentTime
              let f (i,TermComplete) = hrTrFinish %= Map.insert i t
              mapM_ f trm
-             -- tv <- view hrTermRecords
-             -- let f m = Map.unionWith (<>) m (Map.fromList trm)
-             -- liftIO $ atomically $ modifyTVar tv f
              mrDebug $ show trm
      else return ()
 
@@ -349,22 +382,19 @@ handleMsg (i,msg) = do
         Left NotCausal -> return MsgNonCausal
         Left IncompleteClock -> error $ "Failed to import from" ++ show i
     BPing lv v -> do
-      -- hrLiveNodes %= Set.union lv
       mrUpdateLive lv
-      -- pong <- mkPong
       let pong = mrUnicast i =<< mkPong
-      -- let pong = do v1 <- mrGetClock
-      --               mrUnicast i $ BPong v1
       hrDag `eitherModifying` updateClock i v >>= \case
         Left MissingEvents -> return MsgNonCausal
         Left OldValues -> pong >> return MsgOld
         Right () -> pong >> return MsgUpdate
     BPong lv v -> do
-      -- hrLiveNodes %= Set.union lv
       mrUpdateLive lv
+      finished <- mrAllFinished
       hrDag `eitherModifying` updateClock i v >>= \case
         Left MissingEvents -> return MsgNonCausal
-        Left OldValues -> return MsgOld
+        Left OldValues | finished -> return MsgUpdate
+                       | otherwise -> return MsgOld
         Right () -> return MsgUpdate
     BCoord v g -> do
       mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
@@ -383,9 +413,6 @@ handleMsg (i,msg) = do
             Right () -> updateStateVal >> return MsgUpdate
             Left MissingEvents -> error "Missing events after BComplete"
             Left OldValues -> return MsgOld
-        -- Right () -> do updateClock rid (totalClock dag1)
-        --                updateStateVal
-        --                return MsgUpdate
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do
@@ -395,12 +422,12 @@ handleMsg (i,msg) = do
       mrUnicast i $ BComplete dag g
       return MsgOld
 
-mrUpdateLive :: (MCS g) => Set RId -> MRepT g ()
+mrUpdateLive :: (MCS g) => PeerStatus -> MRepT g ()
 mrUpdateLive lv = do
-  lv' <- hrLiveNodes <%= Set.union lv
-  others <- mrOtherIds
+  lv' <- hrLiveNodes <%= (<> lv)
   mrDebug $ "Active nodes: " ++ show lv'
-  if Set.fromList others `Set.isSubsetOf` lv'
+  ready <- mrAllReady
+  if ready
      then do a <- view hrAllReady
              liftIO.atomically $ tryPutTMVar a ()
              return ()
@@ -431,7 +458,6 @@ mrCollectData = do
 mrAwaitScript :: (MCS g) => EScriptT g a -> MRepT g a
 mrAwaitScript sc = mrScript sc >>= \case
   Right a -> do
-    -- mrPrintReport
     return a
   Left b -> mrTryAwait b >>= \case
     Just sc' -> mrCheckChange >> mrAwaitScript sc'
@@ -459,6 +485,7 @@ data MrChange g e
 
 mrWaitChange :: (MCS g) => MRepT g ()
 mrWaitChange = do
+  rid <- view hrId
   chan <- view hrInbox
   sd <- view hrShutdown
   tq <- view hrGetQueue
@@ -477,7 +504,8 @@ mrWaitChange = do
         mrDebug $ "Msgs waiting: " ++ show (length w)
         mrWaitChange
     MrShutdown -> do
-      hrShutdownActive .= True
+      hrLiveNodes %= setFinished rid
+      mrBroadcast =<< mkPong
     MrNewTransact (n,op) -> do
       mrDebug "Got new transaction."
       hrQueue %= Map.insert n op
