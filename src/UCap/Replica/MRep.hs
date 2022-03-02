@@ -202,13 +202,14 @@ evalMRepScript' sc s0 g0 info =
                      , _hrMsgWaiting = []
                      , _hrQueue = Map.empty
                      , _lastSentClock = zeroClock
-                     , _hrLiveNodes = initReady (info^.hrId)
+                     , _hrLiveNodes = PeerStatus Map.empty
                      , _hrTrFinish = Map.empty
                      }
       m = do mrPing
              -- In case effects have been missed due to slow start-up,
              -- we request a complete copy of the state from all
              -- listening peers.
+             mrUpdateLive $ initReady (info^.hrId)
              mrRequestAll
              a <- mrAwaitScript sc
              d <- mrCollectData
