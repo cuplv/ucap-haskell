@@ -47,12 +47,14 @@ dGlobalConfig d = record $ GlobalConfig
 data LocalConfig
   = LocalConfig { lcId :: RId
                 , lcDebug :: DebugConf
+                , lcOutPath :: Maybe FilePath
                 }
 
 dLocalConfig :: Decoder LocalConfig
 dLocalConfig = record $ LocalConfig
   <$> field "id" string
-  <*> field "debug" dDebugConf 
+  <*> field "debug" dDebugConf
+  <*> field "outPath" (Dhall.maybe string)
 
 data SimpleEx
   = TokenEx { initOwner :: String }

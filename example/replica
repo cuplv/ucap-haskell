@@ -1,5 +1,8 @@
 let defaultDebug = { transport = 0, mainLoop = 0, script = 0, setup = 0 }
 
-let debug = defaultDebug
+let debug = defaultDebug // { setup = 1 }
 
-in  \(id : Text) -> { local = { id, debug }, global = ./global.dhall }
+in  \(id : Text) ->
+      { local = { id, debug, outPath = Some "./results/${id}.csv" }
+      , global = ./global.dhall
+      }

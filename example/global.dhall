@@ -6,4 +6,4 @@ let replicas =
       , gamma = { host = "localhost", port = 8092 }
       }
 
-in  { network = toMap replicas, rate = 200.0, duration = 4, setup = ex.escrow }
+in  { network = toMap replicas, rate = 400.0, duration = 4, setup = ex.escrow }

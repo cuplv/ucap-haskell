@@ -16,8 +16,8 @@ import Data.Maybe (fromJust)
 import Data.Time.Clock
 import System.Environment (getArgs)
 
-mkReport :: ExConf -> ExprData -> String
-mkReport conf (ss,fs) =
+debugReport :: Debug -> ExConf -> ExprData -> IO ()
+debugReport debug conf (ss,fs) = do
   let total = Map.size fs
       thp = 
         fromIntegral total
@@ -28,9 +28,28 @@ mkReport conf (ss,fs) =
                     tk = nominalDiffTimeToSeconds (diffUTCTime end start)
                          / fromIntegral total
                 in t + tk
-  in "Total: " ++ show total ++ " tr\n"
-     ++ "Throughput: " ++ show thp ++ " tr/s\n"
-     ++ "Avg. latency: " ++ show latn ++ " ms"
+  debug DbSetup 1 $ "Total: " ++ show total ++ " tr"
+  debug DbSetup 1 $ "Throughput: " ++ show thp ++ " tr/s"
+  debug DbSetup 1 $ "Avg. latency: " ++ show latn ++ " ms"
+
+writeCsvReport :: FilePath -> ExConf -> ExprData -> IO ()
+writeCsvReport fp conf (ss,fs) = do
+  let total = Map.size fs
+      rate = exConfRate conf
+      thp = 
+        fromIntegral total
+        / nominalDiffTimeToSeconds (exConfDuration conf)
+      latn = Map.foldlWithKey f 0 fs * fromIntegral 1000
+        where f t k end =
+                let start = fromJust $ Map.lookup k ss
+                    tk = nominalDiffTimeToSeconds (diffUTCTime end start)
+                         / fromIntegral total
+                in t + tk
+      csvl = show rate ++ ","
+             ++ show total ++ ","
+             ++ show thp ++ ","
+             ++ show latn ++ "\n"
+  appendFile fp csvl
 
 main :: IO ()
 main = do
@@ -79,8 +98,11 @@ main = do
 
     (\case
         Right (Right (_,d),s) -> do
-          debug DbSetup 1 $ "Terminated with state: " ++ show s
-          putStr $ mkReport (gcExConf gc) d
+          debug DbSetup 2 $ "Terminated with state: " ++ show s
+          debugReport debug (gcExConf gc) d
+          case lcOutPath lc of
+            Just fp -> writeCsvReport fp (gcExConf gc) d
+            Nothing -> return ()
           atomically $ putTMVar confirm ()
         Left e -> do
           debug DbSetup 1 (show e)
@@ -98,6 +120,7 @@ main = do
                      , _flsIndex = 0
                      , _flsTrs = trs})
 
+  debug DbSetup 1 "Replica initialized"
   debugLoop
     dbchan
     (Map.singleton rid confirm)
