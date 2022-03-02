@@ -4,6 +4,7 @@ import UCap.Coord
 import UCap.Demo.Config
 import UCap.Lens
 import UCap.Op
+import UCap.Replica.Debug
 import UCap.Replica.MRep
 import UCap.Replica.HttpDemo
 
@@ -46,13 +47,18 @@ main = do
       trs = case gcExSetup gc of
               _ -> repeat $ subOp 1 >>> pure ()
 
-  dbchan <- if lcDebug lc > 0
+  dbchan <- if anyDebug (lcDebug lc)
                then Just <$> newTChanIO
                else return Nothing
-  let debug s = case dbchan of
-                  Just c | lcDebug lc >= 1 -> 
-                    atomically . writeTChan c $ "=> " ++ s
-                  _ -> return ()
+  let debug = case dbchan of
+        Just c -> mkDebug (lcDebug lc)
+                          (\dc s -> let s' = "=> [" ++ show dc ++ "] " ++ s
+                                    in atomically . writeTChan c $ s')
+        Nothing -> \_ _ _ -> return ()
+  -- let debug s = case dbchan of
+  --                 Just c | lcDebug lc >= 1 -> 
+  --                   atomically . writeTChan c $ "=> " ++ s
+  --                 _ -> return ()
 
   tq <- newTChanIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
@@ -73,17 +79,17 @@ main = do
 
     (\case
         Right (Right (_,d),s) -> do
-          debug $ "Terminated with state: " ++ show s
+          debug DbSetup 1 $ "Terminated with state: " ++ show s
           putStr $ mkReport (gcExConf gc) d
           atomically $ putTMVar confirm ()
         Left e -> do
-          debug (show e)
+          debug DbSetup 1 (show e)
           atomically $ putTMVar confirm ())
 
   forkIO $ do
     -- Block until all replicas are active
     () <- atomically $ takeTMVar allReady
-    debug "allReady!"
+    debug DbSetup 2 "allReady!"
     t <- getCurrentTime
     let h = (tq,ts,done)
     evalStateT

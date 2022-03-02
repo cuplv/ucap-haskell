@@ -25,6 +25,7 @@ import UCap.Coord
 import UCap.Domain.Classes
 import UCap.Lens
 import UCap.Op
+import UCap.Replica.Debug
 import UCap.Replica.Script
 import UCap.Replica.Transact
 
@@ -33,6 +34,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
+
+dbc = DbScript
 
 data TermStatus
   = TermComplete
@@ -165,14 +168,14 @@ transactManySD_ (o1:os) = do
 
 transactQueue
   :: (CoordSys g)
-  => (String -> IO ())
+  => Debug
   -> EScriptT g ()
 transactQueue debug =
   evalStateT (transactQueue' debug) (ExLocal Map.empty)
 
 transactQueue'
   :: (CoordSys g)
-  => (String -> IO ())
+  => Debug
   -> StateT (ExLocal g) (EScriptT g) ()
 transactQueue' debug = do
   m <- use exlWaiting
@@ -181,7 +184,7 @@ transactQueue' debug = do
         exlWaiting %= Map.delete n
         transactQueue' debug
       bs = map bof $ Map.toList m
-  liftIO $ debug "transactQueue'"
+  liftIO $ debug dbc 2 "transactQueue'"
   awaitSD' . firstOf $
     [ (lift <$> trBlock grantRequests') `andThen_` transactQueue' debug
     , (lift <$> trBlock acceptGrants') `andThen_` transactQueue' debug ]
@@ -190,13 +193,13 @@ transactQueue' debug = do
 
 consumeQueue
   :: (CoordSys g)
-  => (String -> IO ())
+  => Debug
   -> Block' (StateT (ExLocal g) (EScriptT g)) ()
 consumeQueue debug = do
   new <- view exrQueue <$> checkState
   let newIds = Map.keys new
   not (null newIds) ?> do
-    liftIO.debug $ "Consumed " ++ show newIds
+    liftIO.debug dbc 1 $ "Consumed " ++ show newIds
     lift.writeState $ ExWr mempty [] newIds
     blocks <- lift $ traverse
                        (\t -> trBlock <$> (trScript . transact $ t))

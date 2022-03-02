@@ -14,9 +14,11 @@ module UCap.Demo.Config
 
 import UCap.Coord
 import UCap.Domain
+import UCap.Replica.Debug
 import UCap.Replica.HttpDemo
 import UCap.Replica.MRep (Addrs,RId)
 
+import qualified Data.Map as Map
 import Data.Text (pack)
 import Data.Time.Clock
 import Dhall
@@ -44,13 +46,13 @@ dGlobalConfig d = record $ GlobalConfig
 
 data LocalConfig
   = LocalConfig { lcId :: RId
-                , lcDebug :: Int
+                , lcDebug :: DebugConf
                 }
 
 dLocalConfig :: Decoder LocalConfig
 dLocalConfig = record $ LocalConfig
   <$> field "id" string
-  <*> (fromIntegral <$> field "debug" natural) 
+  <*> field "debug" dDebugConf 
 
 data SimpleEx
   = TokenEx { initOwner :: String }
@@ -76,3 +78,14 @@ dAddr :: Decoder (String,Int)
 dAddr = record $ (,)
   <$> field "host" string
   <*> (fromIntegral <$> field "port" natural)
+
+intNat :: Decoder Int
+intNat = fromIntegral <$> natural
+
+dDebugConf :: Decoder DebugConf
+dDebugConf = record $ 
+  (Map.insert DbTransport <$> field "transport" intNat)
+  <*> ((Map.insert DbMainLoop <$> field "mainLoop" intNat)
+        <*> ((Map.insert DbScript <$> field "script" intNat)
+              <*> (Map.insert DbSetup <$> field "setup" intNat
+                   <*> pure Map.empty)))

@@ -28,6 +28,7 @@ import UCap.Domain
 import UCap.Lens
 import UCap.Op
 import UCap.Replica
+import UCap.Replica.Debug
 import UCap.Replica.EScript
 
 import Control.Concurrent.STM
@@ -129,7 +130,7 @@ data MRepInfo g e
              , _hrAddrs :: Addrs
              , _hrSend :: RId -> RId -> BMsg g e -> IO ()
              , _hrInbox :: TChan (TBM g e)
-             , _hrDebug :: String -> IO ()
+             , _hrDebug :: Debug
              , _hrShutdown :: TMVar ()
              , _hrGetQueue :: TChan (Int, Op' g)
              , _hrTrStart :: TVar (Map Int UTCTime)
@@ -143,10 +144,10 @@ type MRepT g =
          (StateT (MRepState g (GEffect g) (GState g))
             (ReaderT (MRepInfo g (GEffect g)) IO))
 
-mrDebug :: String -> MRepT g ()
-mrDebug s = do
+mrDebug :: Int -> String -> MRepT g ()
+mrDebug n s = do
   f <- view hrDebug
-  liftIO $ f s
+  liftIO $ f DbMainLoop n s
 
 mrOtherIds :: MRepT g [RId]
 mrOtherIds = do
@@ -256,7 +257,7 @@ mrReadState = do
   ctx <- RepCtx <$> use hrCurrentState <*> use hrCoord
   q <- use hrQueue
   finished <- mrAllFinished
-  mrDebug $ "Passing along " ++ show (length q) ++ " trs."
+  mrDebug 3 $ "Passing along " ++ show (length q) ++ " trs."
   return $ ExRd
     { _exrStore = ctx
     , _exrQueue = q
@@ -266,12 +267,12 @@ mrReadState = do
 mrWriteState :: (MCS g) => ExWr g (GEffect g) -> MRepT g ()
 mrWriteState (ExWr (RepCtx e mg) trm rc) = do
   mapM_ (\i -> hrQueue %= Map.delete i) rc
-  mrDebug $ show rc
+  mrDebug 3 $ show rc
   if not $ null trm
      then do t <- liftIO getCurrentTime
              let f (i,TermComplete) = hrTrFinish %= Map.insert i t
              mapM_ f trm
-             mrDebug $ show trm
+             mrDebug 3 $ show trm
      else return ()
 
   rid <- view hrId
@@ -371,12 +372,12 @@ handleMsg (i,msg) = do
   rid <- view hrId
   case msg of
     BNewEffect v e g -> do
-      mrDebug $ "Handle BNewEffect from " ++ show i ++ " " ++ show v
+      mrDebug 1 $ "Handle BNewEffect from " ++ show i ++ " " ++ show v
       let tryImport d = observe rid i <$> eventImport' i (v,e) d
       hrDag `eitherModifying` tryImport >>= \case
         Right () -> do updateStateVal
                        v' <- mrGetClock
-                       mrDebug $ "Clock up to " ++ show v'
+                       mrDebug 1 $ "Clock up to " ++ show v'
                        mrCompareClock
                        return MsgUpdate
         Left NotCausal -> return MsgNonCausal
@@ -397,15 +398,15 @@ handleMsg (i,msg) = do
                        | otherwise -> return MsgOld
         Right () -> return MsgUpdate
     BCoord v g -> do
-      mrDebug $ "Handle BCoord from " ++ show i ++ ", " ++ show g
+      mrDebug 2 $ "Handle BCoord from " ++ show i ++ ", " ++ show g
       hrDag `eitherModifying` updateClock i v >>= \case
         Left MissingEvents -> return MsgNonCausal
         _ -> do hrCoord <>= g
                 g' <- use hrCoord
-                mrDebug $ "Updated to " ++ show g'
+                mrDebug 2 $ "Updated to " ++ show g'
                 return MsgUpdate
     BComplete dag1 g -> do
-      mrDebug $ "Handle BComplete from " ++ show i
+      mrDebug 2 $ "Handle BComplete from " ++ show i
       hrDag `eitherModifying` mergeThread dag1 >>= \case
         Right () -> do
           v' <- mrGetClock
@@ -416,7 +417,7 @@ handleMsg (i,msg) = do
         Left i2 -> error $ "BComplete error, cannot merge on " 
                            ++ show i2
     BRequest -> do
-      mrDebug $ "Handle BRequest from " ++ show i
+      mrDebug 2 $ "Handle BRequest from " ++ show i
       dag <- use hrDag
       g <- use hrCoord
       mrUnicast i $ BComplete dag g
@@ -425,7 +426,7 @@ handleMsg (i,msg) = do
 mrUpdateLive :: (MCS g) => PeerStatus -> MRepT g ()
 mrUpdateLive lv = do
   lv' <- hrLiveNodes <%= (<> lv)
-  mrDebug $ "Active nodes: " ++ show lv'
+  mrDebug 1 $ "Active nodes: " ++ show lv'
   ready <- mrAllReady
   if ready
      then do a <- view hrAllReady
@@ -438,8 +439,8 @@ mrCompareClock = do
   v1 <- mrGetClock
   v2 <- use lastSentClock
   dag <- use hrDag
-  mrDebug $ "Clock diff at " ++ show (aggDiff v1 v2)
-  mrDebug $ "Dag size at " ++ show (sizeVT dag)
+  mrDebug 2 $ "Clock diff at " ++ show (aggDiff v1 v2)
+  mrDebug 2 $ "Dag size at " ++ show (sizeVT dag)
   if aggDiff v1 v2 >= 10
      then mrBroadcast =<< mkPong
      else return ()
@@ -474,7 +475,7 @@ mrCheckChange = do
       MsgNonCausal -> do
         hrMsgWaiting %= (++ [msg])
         w <- use hrMsgWaiting
-        mrDebug $ "Msgs waiting: " ++ show (length w)
+        mrDebug 1 $ "Msgs waiting: " ++ show (length w)
         return ()
     Nothing -> return ()
 
@@ -501,11 +502,11 @@ mrWaitChange = do
       MsgNonCausal -> do
         hrMsgWaiting %= (++ [msg])
         w <- use hrMsgWaiting
-        mrDebug $ "Msgs waiting: " ++ show (length w)
+        mrDebug 1 $ "Msgs waiting: " ++ show (length w)
         mrWaitChange
     MrShutdown -> do
       hrLiveNodes %= setFinished rid
       mrBroadcast =<< mkPong
     MrNewTransact (n,op) -> do
-      mrDebug "Got new transaction."
+      mrDebug 3 "Got new transaction."
       hrQueue %= Map.insert n op

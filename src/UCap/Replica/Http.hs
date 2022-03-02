@@ -11,6 +11,7 @@ module UCap.Replica.Http
   ) where
 
 import UCap.Coord
+import UCap.Replica.Debug
 import UCap.Replica.MRep
 
 import Control.Concurrent.STM
@@ -54,7 +55,7 @@ instance
 msgGetter
   :: (HttpCS g)
   => TChan (TBM' g)
-  -> (String -> IO ())
+  -> Debug
   -> Application
 msgGetter chan debug request respond = do
   body <- strictRequestBody request
@@ -62,10 +63,17 @@ msgGetter chan debug request respond = do
     Just tbm -> do
       let src = fst tbm
           msg = snd tbm
-      case msg of
-        BPing _ _ -> return ()
-        BPong _ _ -> return ()
-        _ -> debug $ "RECV(" ++ src ++ ") " ++ show msg
+          dbl = case msg of
+                  BPing _ _ -> 3
+                  BPong _ _ -> 3
+                  BCoord _ _ -> 2
+                  _ -> 1
+      debug DbTransport dbl $ "RECV(" ++ src ++ ")" ++ show msg
+      -- case msg of
+      --   BPing _ _ -> return ()
+      --   BPong _ _ -> return ()
+      --   BCoord _ _ _ -> undefined
+      --   _ -> debug 1 $ "RECV(" ++ src ++ ") " ++ show msg
 
       -- Complete HTTP response before sending msg to the main loop.
       -- The main loop may terminate when it receives the message,
@@ -78,7 +86,7 @@ msgGetter chan debug request respond = do
 sendMsg
   :: (HttpCS g)
   => Client.Manager
-  -> (String -> IO ()) -- ^ Debug
+  -> Debug -- ^ Debug
   -> Map RId (String,Int) -- ^ Addresses
   -> RId -- ^ Source replica
   -> RId -- ^ Destination replica
@@ -94,17 +102,24 @@ sendMsg man debug addrs src dst msg = do
               , Client.requestBody =
                   Client.RequestBodyLBS $ encode (src,msg)
               }
-  case msg of
-    BPing _ _ -> return ()
-    BPong _ _ -> return ()
-    _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
+      dbl = case msg of
+              BPing _ _ -> 3
+              BPong _ _ -> 3
+              BCoord _ _ -> 2
+              _ -> 1
+  debug DbTransport dbl $ "SEND(" ++ dst ++ ") " ++ show msg
+  -- case msg of
+  --   BPing _ _ -> return ()
+  --   BPong _ _ -> return ()
+  --   _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
   Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
     case e of
       Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
-        debug $ "failed send to " ++ show dst ++ ", msg " ++ show msg
+        debug DbTransport 1 $ "failed send to " ++ show dst
+                              ++ ", msg " ++ show msg
       Client.HttpExceptionRequest _ (Client.InternalException _) ->
-        debug $ "internal exception on send to "
-                ++ show dst ++ ", msg " ++ show msg
+        debug DbTransport 1 $ "internal exception on send to "
+                              ++ show dst ++ ", msg " ++ show msg
       e -> error $ "unhandled http-client exception: " ++ show e
   return ()
 
@@ -112,14 +127,14 @@ mkListener
   :: (HttpCS g)
   => Int
   -> TChan (TBM' g)
-  -> (String -> IO ())
+  -> Debug
   -> IO ()
 mkListener port chan debug = do
   runSettings (setPort port $ defaultSettings) (msgGetter chan debug)
 
 mkSender
   :: (HttpCS g)
-  => (String -> IO ())
+  => Debug
   -> Map RId (String,Int)
   -> IO (RId -> RId -> BMsg' g -> IO ())
 mkSender debug addrs = do

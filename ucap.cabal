@@ -23,6 +23,7 @@ library
                     , UCap.Lifter
                     , UCap.Op
                     , UCap.Replica
+                    , UCap.Replica.Debug
                     , UCap.Replica.Demo
                     , UCap.Replica.EScript
                     , UCap.Replica.Http

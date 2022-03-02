@@ -9,6 +9,7 @@ import UCap.Coord
 import UCap.Domain.Int
 import UCap.Lens
 import UCap.Op
+import UCap.Replica.Debug
 import UCap.Replica.Http
 import UCap.Replica.MRep
 import UCap.Replica.EScript
@@ -68,7 +69,6 @@ data DebugLoop
   = Debug String
   | ScriptsDone
   | AllDone
-
 
 feedLoop
   :: (TChan (Int, a), TVar (Map Int UTCTime), TMVar ())
@@ -130,7 +130,7 @@ demoRep
   -> TMVar () -- ^ All-ready notifier
   -> TChan (Int, Op' g) -- ^ Transaction queue
   -> TVar (Map Int UTCTime) -- ^ Transaction start times
-  -> (String -> IO ()) -- ^ Debug action
+  -> Debug -- ^ Debug action
   -> RId
   -> HRSettings g
   -> IO (Either () ((), ExprData), GState g)

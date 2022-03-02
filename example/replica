@@ -1,1 +1,5 @@
-\(id : Text) -> { local = { id, debug = 1 }, global = ./global.dhall }
+let defaultDebug = { transport = 0, mainLoop = 0, script = 0, setup = 0 }
+
+let debug = defaultDebug
+
+in  \(id : Text) -> { local = { id, debug }, global = ./global.dhall }
