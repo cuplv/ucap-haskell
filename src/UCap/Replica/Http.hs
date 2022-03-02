@@ -1,12 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module UCap.Replica.Http
   ( HttpCS
-  , mkSender
+  , mkSenders
   , mkListener
   ) where
 
@@ -14,6 +15,7 @@ import UCap.Coord
 import UCap.Replica.Debug
 import UCap.Replica.MRep
 
+import Control.Concurrent (forkIO, ThreadId)
 import Control.Concurrent.STM
 import qualified Control.Exception.Base as Exception
 import Data.Aeson
@@ -83,46 +85,6 @@ msgGetter chan debug request respond = do
       return r
     Nothing -> respond $ responseLBS status400 [] ""
 
-sendMsg
-  :: (HttpCS g)
-  => Client.Manager
-  -> Debug -- ^ Debug
-  -> Map RId (String,Int) -- ^ Addresses
-  -> RId -- ^ Source replica
-  -> RId -- ^ Destination replica
-  -> BMsg' g
-  -> IO ()
-sendMsg man debug addrs src dst msg = do
-  addr <- case Map.lookup dst addrs of
-            Just (addr,port) -> return $ "http://" ++ addr ++ ":" ++ show port ++ "/"
-            Nothing -> error $ show dst ++ " has no network address"
-  initialRequest <- Client.parseRequest addr
-  let req = initialRequest 
-              { Client.method = "POST"
-              , Client.requestBody =
-                  Client.RequestBodyLBS $ encode (src,msg)
-              }
-      dbl = case msg of
-              BPing _ _ -> 3
-              BPong _ _ -> 3
-              BCoord _ _ -> 2
-              _ -> 1
-  debug DbTransport dbl $ "SEND(" ++ dst ++ ") " ++ show msg
-  -- case msg of
-  --   BPing _ _ -> return ()
-  --   BPong _ _ -> return ()
-  --   _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
-  Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
-    case e of
-      Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
-        debug DbTransport 1 $ "failed send to " ++ show dst
-                              ++ ", msg " ++ show msg
-      Client.HttpExceptionRequest _ (Client.InternalException _) ->
-        debug DbTransport 1 $ "internal exception on send to "
-                              ++ show dst ++ ", msg " ++ show msg
-      e -> error $ "unhandled http-client exception: " ++ show e
-  return ()
-
 mkListener
   :: (HttpCS g)
   => Int
@@ -132,11 +94,85 @@ mkListener
 mkListener port chan debug = do
   runSettings (setPort port $ defaultSettings) (msgGetter chan debug)
 
-mkSender
+dbLevel :: BMsg' g -> Int
+dbLevel = \case
+  BPing _ _ -> 3
+  BPong _ _ -> 3
+  BCoord _ _ -> 2
+  _ -> 1
+
+sendMsg
+  :: (HttpCS g)
+  => Client.Manager
+  -> Debug -- ^ Debug
+  -> String -- ^ Store ID
+  -> RId -- ^ Source ID
+  -> RId -- ^ Target ID
+  -> (String,Int) -- ^ Address
+  -> [BMsg' g]
+  -> IO ()
+sendMsg man debug sid source target (host,port) msgs = do
+  -- addr <- case Map.lookup dst addrs of
+  --           Just (addr,port) -> return $ "http://" ++ addr ++ ":" ++ show port ++ "/"
+  --           Nothing -> error $ show dst ++ " has no network address"
+  initialRequest <- Client.parseRequest $
+                      "http://" ++ host ++ ":" ++ show port ++ "/"
+  let req = initialRequest 
+              { Client.method = "POST"
+              , Client.requestBody =
+                  Client.RequestBodyLBS $ encode (sid,source,msgs)
+              }
+  mapM_ (\m -> debug DbTransport (dbLevel m) $ 
+                 "SEND(" ++ target ++ ") " ++ show m)
+        msgs
+  -- debug DbTransport dbl $ "SEND(" ++ dst ++ ") " ++ show msg
+  -- case msg of
+  --   BPing _ _ -> return ()
+  --   BPong _ _ -> return ()
+  --   _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
+  Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
+    case e of
+      Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
+        debug DbTransport 1 $ "failed send to " ++ show target
+                              ++ ", msg " ++ show msgs
+      Client.HttpExceptionRequest _ (Client.InternalException _) ->
+        debug DbTransport 1 $ "internal exception on send to "
+                              ++ show target ++ ", msg " ++ show msgs
+      e -> error $ "unhandled http-client exception: " ++ show e
+  return ()
+
+readMany :: TChan a -> STM [a]
+readMany chan = tryReadTChan chan >>= \case
+  Just a -> (a :) <$> readMany chan
+  Nothing -> return []
+
+sendLoop
+  :: (HttpCS g)
+  => Client.Manager
+  -> Debug
+  -> String -- ^ Store ID
+  -> RId -- ^ Source ID
+  -> RId -- ^ Target ID
+  -> (String,Int) -- ^ Target address
+  -> TChan (BMsg' g) -- ^ 
+  -> IO ()
+sendLoop man debug sid source target addr outbox = do
+  m1 <- atomically $ readTChan outbox
+  ms <- atomically $ readMany outbox
+  sendMsg man debug sid source target addr (m1:ms)
+  sendLoop man debug sid source target addr outbox
+
+mkSenders
   :: (HttpCS g)
   => Debug
+  -> String -- ^ Store ID
+  -> RId -- ^ Replica ID
   -> Map RId (String,Int)
-  -> IO (RId -> RId -> BMsg' g -> IO ())
-mkSender debug addrs = do
+  -> IO (Map RId (TChan (BMsg' g), ThreadId))
+mkSenders debug sid rid addrs = do
   man <- Client.newManager Client.defaultManagerSettings
-  return $ sendMsg man debug addrs
+  let f i addr = do
+        outbox <- newTChanIO
+        tid <- forkIO $ sendLoop man debug sid rid i addr outbox
+        return (outbox, tid)
+  Map.traverseWithKey f addrs
