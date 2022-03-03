@@ -32,8 +32,8 @@ debugReport debug conf (ss,fs) = do
   debug DbSetup 1 $ "Throughput: " ++ show thp ++ " tr/s"
   debug DbSetup 1 $ "Avg. latency: " ++ show latn ++ " ms"
 
-writeCsvReport :: FilePath -> ExConf -> ExprData -> IO ()
-writeCsvReport fp conf (ss,fs) = do
+writeCsvReport :: FilePath -> Int -> ExConf -> ExprData -> String -> IO ()
+writeCsvReport fp eid conf (ss,fs) kind = do
   let total = Map.size fs
       rate = exConfRate conf
       thp = 
@@ -45,7 +45,9 @@ writeCsvReport fp conf (ss,fs) = do
                     tk = nominalDiffTimeToSeconds (diffUTCTime end start)
                          / fromIntegral total
                 in t + tk
-      csvl = show rate ++ ","
+      csvl = show eid ++ ","
+             ++ kind ++ ","
+             ++ show rate ++ ","
              ++ show total ++ ","
              ++ show thp ++ ","
              ++ show latn ++ "\n"
@@ -54,16 +56,21 @@ writeCsvReport fp conf (ss,fs) = do
 main :: IO ()
 main = do
   args <- getArgs
-  (gc,lc) <- case args of
-               [gc,lc] -> (,) <$> dhallInput (dGlobalConfig dSimpleEx) gc
-                              <*> dhallInput dLocalConfig lc
-               [cc] -> dhallInput (dCombinedConfig dSimpleEx) cc
-               _ -> error $ "Must call with 2 args (global, local) \
-                            \or 1 arg (combined)"
-  let exconf = gcExConf gc
+  (gc,lc,es) <- case args of
+    -- [gc,lc] -> (,) <$> dhallInput (dCombinedConfig dSimpleEx) gc
+    --                <*> dhallInput dLocalConfig lc
+    [cc] -> dhallInput (dCombinedConfig dSimpleEx) cc
+    _ -> error $ "Must call with 2 args (global, local) \
+                 \or 1 arg (combined)"
+  mapM_ (runExpr gc lc) (zip [0..] es)
+
+runExpr :: Addrs -> LocalConfig -> (Int, Experiment SimpleEx) -> IO ()
+runExpr addrs lc (eid,ex) = do
+  let exconf = exConf ex
+      sid = "store" ++ show eid
       rid = lcId lc
-      addrs = gcNetwork gc
-      trs = case gcExSetup gc of
+      -- addrs = gcNetwork gc
+      trs = case exSetup ex of
               _ -> repeat $ subOp 1 >>> pure ()
 
   dbchan <- if anyDebug (lcDebug lc)
@@ -71,7 +78,9 @@ main = do
                else return Nothing
   let debug = case dbchan of
         Just c -> mkDebug (lcDebug lc)
-                          (\dc s -> let s' = "=> [" ++ show dc ++ "] " ++ s
+                          (\dc s -> let s' = "=> [" ++ show eid
+                                             ++ ":" ++ show dc
+                                             ++ "] " ++ s
                                     in atomically . writeTChan c $ s')
         Nothing -> \_ _ _ -> return ()
   -- let debug s = case dbchan of
@@ -87,31 +96,35 @@ main = do
   confirm <- newEmptyTMVarIO -- termination confirmation
   allReady <- newEmptyTMVarIO
 
+  let primary = head $ Map.keys addrs
+
   forkFinally
-    (case gcExSetup gc of
-        TokenEx i -> demoRep shutdown allReady tq ts debug rid $ 
-                       HRSettings { _hsAddrs = addrs
-                                  , _hsInitState = 100 :: Int
-                                  , _hsInitCoord = mkTokenG i
-                                  , _hsStoreId = "asdf"
-                                  , _hsLocalId = rid
-                                  }
-        EscrowEx i n b ->
-          let g = initIntEscrow b [i] $ Map.fromList [(i,(n,0))]
+    (case exSetup ex of
+        TokenEx -> demoRep shutdown allReady tq ts debug rid $ 
+                     HRSettings { _hsAddrs = addrs
+                                , _hsInitState = 100 :: Int
+                                , _hsInitCoord = mkTokenG primary
+                                , _hsStoreId = sid
+                                , _hsLocalId = rid
+                                }
+        EscrowEx n b ->
+          let g = initIntEscrow b [primary] $
+                    Map.fromList [(primary,(n,0))]
           in demoRep shutdown allReady tq ts debug rid $ 
                HRSettings { _hsAddrs = addrs
                           , _hsInitState = n
                           , _hsInitCoord = g
-                          , _hsStoreId = "asdf"
+                          , _hsStoreId = sid
                           , _hsLocalId = rid
                           })
 
     (\case
         Right (Right (_,d),s) -> do
           debug DbSetup 2 $ "Terminated with state: " ++ show s
-          debugReport debug (gcExConf gc) d
+          debugReport debug (exConf ex) d
           case lcOutPath lc of
-            Just fp -> writeCsvReport fp (gcExConf gc) d
+            Just fp ->
+              writeCsvReport fp eid (exConf ex) d (show $ exSetup ex)
             Nothing -> return ()
           atomically $ putTMVar confirm ()
         Left e -> do

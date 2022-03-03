@@ -76,7 +76,7 @@ msgGetter chan debug sid request respond = do
       r <- respond $ responseLBS status200 [] ""
       if msid == sid
          then atomically $ mapM_' (\msg -> writeTChan chan (source,msg)) msgs
-         else return ()
+         else debug DbTransport 1 $ "Dropping msg for store " ++ show msid
       return r
     Nothing -> do
       debug DbTransport 1 $ "Failed to decode msg"

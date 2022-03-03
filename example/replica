@@ -1,8 +1,46 @@
-let defaultDebug = { transport = 0, mainLoop = 0, script = 0, setup = 0 }
+\(rid : Text) ->
+  let lib = ./lib.dhall
 
-let debug = defaultDebug // { setup = 1 }
+  let debug = lib.defaultDebug // { setup = 1 }
 
-in  \(id : Text) ->
-      { local = { id, debug, outPath = Some "./results/${id}.csv" }
-      , global = ./global.dhall
+  let peers =
+        { alpha = { host = "localhost", port = 8090 }
+        , beta = { host = "localhost", port = 8091 }
+        , gamma = { host = "localhost", port = 8092 }
+        }
+
+  let exprDuration = 10
+
+  let escrow =
+        \(rate : Double) ->
+          { rate
+          , duration = exprDuration
+          , setup = lib.escrow { amount = 100000, bufferFactor = 50 }
+          }
+
+  let token =
+        \(rate : Double) -> { rate, duration = exprDuration, setup = lib.token }
+
+  let experiments =
+        [ escrow 200.0
+        , escrow 400.0
+        , escrow 600.0
+        , escrow 800.0
+        , escrow 1000.0
+        , escrow 1200.0
+        , escrow 1400.0
+        , escrow 1600.0
+        , token 200.0
+        , token 400.0
+        , token 600.0
+        , token 800.0
+        , token 1000.0
+        , token 1200.0
+        , token 1400.0
+        , token 1600.0
+        ]
+
+  in  { local = { id = rid, debug, outPath = Some "./results/${rid}.csv" }
+      , network = toMap peers
+      , experiments
       }

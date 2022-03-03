@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module UCap.Demo.Config
-  ( GlobalConfig (..)
-  , dGlobalConfig
-  , LocalConfig (..)
+  ( LocalConfig (..)
   , dLocalConfig
+  , Experiment (..)
+  , dExperiment
   , SimpleEx (..)
   , dSimpleEx
   , CombinedConfig
@@ -23,22 +23,20 @@ import Data.Text (pack)
 import Data.Time.Clock
 import Dhall
 
-type CombinedConfig e = (GlobalConfig e, LocalConfig)
+type CombinedConfig e = (Addrs, LocalConfig, [Experiment e])
 
-dCombinedConfig d = record $ (,)
-  <$> field "global" (dGlobalConfig d)
-  <*> field "local" dLocalConfig
-
-data GlobalConfig e
-  = GlobalConfig { gcNetwork :: Addrs
-                 , gcExConf :: ExConf
-                 , gcExSetup :: e                 
-                 }
-
-dGlobalConfig :: Decoder e -> Decoder (GlobalConfig e)
-dGlobalConfig d = record $ GlobalConfig
+dCombinedConfig d = record $ (,,)
   <$> field "network" (Dhall.map string dAddr)
-  <*> (ExConf
+  <*> field "local" dLocalConfig
+  <*> field "experiments" (list $ dExperiment d)
+
+
+data Experiment e
+  = Experiment { exConf :: ExConf, exSetup :: e }
+
+dExperiment :: Decoder e -> Decoder (Experiment e)
+dExperiment d = record $ Experiment
+  <$> (ExConf
          <$> field "rate" double
          <*> (secondsToNominalDiffTime . fromIntegral
               <$> field "duration" natural))
@@ -57,16 +55,18 @@ dLocalConfig = record $ LocalConfig
   <*> field "outPath" (Dhall.maybe string)
 
 data SimpleEx
-  = TokenEx { initOwner :: String }
-  | EscrowEx { initOwner :: String, amount :: Int, bfactor :: Int }
+  = TokenEx
+  | EscrowEx { amount :: Int, bfactor :: Int }
+
+instance Show SimpleEx where
+  show TokenEx = "token"
+  show (EscrowEx n b) = "escrow-" ++ show b
 
 dSimpleEx :: Decoder SimpleEx
 dSimpleEx = union $
-  (TokenEx
-     <$> constructor "Token" (record $ field "initOwner" string))
+  (const TokenEx <$> constructor "Token" unit)
   <> (constructor "Escrow" . record $ EscrowEx
-        <$> field "initOwner" string
-        <*> (fromIntegral <$> field "amount" natural)
+        <$> (fromIntegral <$> field "amount" natural)
         <*> (fromIntegral <$> field "bufferFactor" natural))
 
 type LG = TokenG String IntC
