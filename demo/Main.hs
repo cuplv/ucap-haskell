@@ -90,11 +90,21 @@ main = do
   forkFinally
     (case gcExSetup gc of
         TokenEx i -> demoRep shutdown allReady tq ts debug rid $ 
-                       HRSettings addrs (100::Int) (mkTokenG i)
+                       HRSettings { _hsAddrs = addrs
+                                  , _hsInitState = 100 :: Int
+                                  , _hsInitCoord = mkTokenG i
+                                  , _hsStoreId = "asdf"
+                                  , _hsLocalId = rid
+                                  }
         EscrowEx i n b ->
           let g = initIntEscrow b [i] $ Map.fromList [(i,(n,0))]
           in demoRep shutdown allReady tq ts debug rid $ 
-               HRSettings addrs n g)
+               HRSettings { _hsAddrs = addrs
+                          , _hsInitState = n
+                          , _hsInitCoord = g
+                          , _hsStoreId = "asdf"
+                          , _hsLocalId = rid
+                          })
 
     (\case
         Right (Right (_,d),s) -> do

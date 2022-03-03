@@ -54,52 +54,50 @@ instance
   , Show (GState g)
   ) => HttpCS g
 
+{-| 'mapM_' specialized to lists, to avoid type ambiguity when decoding
+  from HTTP request bodies. -}
+mapM_' :: (Monad m) => (a -> m b) -> [a] -> m ()
+mapM_' = mapM_
+
 msgGetter
   :: (HttpCS g)
   => TChan (TBM' g)
   -> Debug
+  -> String -- ^ Store ID
   -> Application
-msgGetter chan debug request respond = do
+msgGetter chan debug sid request respond = do
   body <- strictRequestBody request
   case decode body of
-    Just tbm -> do
-      let src = fst tbm
-          msg = snd tbm
-          dbl = case msg of
-                  BPing _ _ -> 3
-                  BPong _ _ -> 3
-                  BCoord _ _ -> 2
-                  _ -> 1
-      debug DbTransport dbl $ "RECV(" ++ src ++ ")" ++ show msg
-      -- case msg of
-      --   BPing _ _ -> return ()
-      --   BPong _ _ -> return ()
-      --   BCoord _ _ _ -> undefined
-      --   _ -> debug 1 $ "RECV(" ++ src ++ ") " ++ show msg
-
-      -- Complete HTTP response before sending msg to the main loop.
-      -- The main loop may terminate when it receives the message,
-      -- which could interrupt an incomplete response.
+    Just (msid,source,msgs) -> do
+      mapM_'
+        (\msg -> debug DbTransport (dbLevel msg) $ "RECV(" ++ source ++ ")"
+                                                   ++ show msg)
+        msgs
       r <- respond $ responseLBS status200 [] ""
-      atomically (writeTChan chan tbm)
+      if msid == sid
+         then atomically $ mapM_' (\msg -> writeTChan chan (source,msg)) msgs
+         else return ()
       return r
-    Nothing -> respond $ responseLBS status400 [] ""
+    Nothing -> do
+      debug DbTransport 1 $ "Failed to decode msg"
+      respond $ responseLBS status400 [] ""
 
 mkListener
   :: (HttpCS g)
   => Int
   -> TChan (TBM' g)
   -> Debug
+  -> String -- ^ Store ID
   -> IO ()
-mkListener port chan debug = do
-  runSettings (setPort port $ defaultSettings) (msgGetter chan debug)
+mkListener port chan debug sid = do
+  runSettings (setPort port $ defaultSettings) (msgGetter chan debug sid)
 
 dbLevel :: BMsg' g -> Int
 dbLevel = \case
-  BPing _ _ -> 3
-  BPong _ _ -> 3
-  BCoord _ _ -> 2
-  _ -> 1
+  BPing _ _ -> 4
+  BPong _ _ -> 4
+  BCoord _ _ -> 3
+  _ -> 2
 
 sendMsg
   :: (HttpCS g)
@@ -112,9 +110,10 @@ sendMsg
   -> [BMsg' g]
   -> IO ()
 sendMsg man debug sid source target (host,port) msgs = do
-  -- addr <- case Map.lookup dst addrs of
-  --           Just (addr,port) -> return $ "http://" ++ addr ++ ":" ++ show port ++ "/"
-  --           Nothing -> error $ show dst ++ " has no network address"
+  if length msgs > 1
+     then debug DbTransport 1 $ "Sending " ++ show (length msgs)
+                                ++ " msgs to " ++ target
+     else return ()
   initialRequest <- Client.parseRequest $
                       "http://" ++ host ++ ":" ++ show port ++ "/"
   let req = initialRequest 
@@ -125,11 +124,6 @@ sendMsg man debug sid source target (host,port) msgs = do
   mapM_ (\m -> debug DbTransport (dbLevel m) $ 
                  "SEND(" ++ target ++ ") " ++ show m)
         msgs
-  -- debug DbTransport dbl $ "SEND(" ++ dst ++ ") " ++ show msg
-  -- case msg of
-  --   BPing _ _ -> return ()
-  --   BPong _ _ -> return ()
-  --   _ -> debug $ "SEND(" ++ dst ++ ") " ++ show msg
   Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
     case e of
       Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
@@ -141,10 +135,24 @@ sendMsg man debug sid source target (host,port) msgs = do
       e -> error $ "unhandled http-client exception: " ++ show e
   return ()
 
+{-| Read 0 or more elements from a 'TChan'.  This never retries. -}
 readMany :: TChan a -> STM [a]
 readMany chan = tryReadTChan chan >>= \case
   Just a -> (a :) <$> readMany chan
   Nothing -> return []
+
+{-| Read 1 or more elements from a 'TChan'.  This will retry when there
+  are no elements in the channel. -}
+readMany1 :: TChan a -> STM [a]
+readMany1 chan = do
+  m1 <- readTChan chan
+  ms <- readMany chan
+  return (m1:ms)
+
+scanMsgs :: [Either () a] -> (Bool,[a])
+scanMsgs (Right a : ms) = (a :) <$> scanMsgs ms
+scanMsgs (Left () : _) = (True,[])
+scanMsgs [] = (False,[])
 
 sendLoop
   :: (HttpCS g)
@@ -154,13 +162,17 @@ sendLoop
   -> RId -- ^ Source ID
   -> RId -- ^ Target ID
   -> (String,Int) -- ^ Target address
-  -> TChan (BMsg' g) -- ^ 
+  -> TChan (Either () (BMsg' g)) -- ^ Outbox
+  -> TMVar () -- ^ Done
   -> IO ()
-sendLoop man debug sid source target addr outbox = do
-  m1 <- atomically $ readTChan outbox
-  ms <- atomically $ readMany outbox
-  sendMsg man debug sid source target addr (m1:ms)
-  sendLoop man debug sid source target addr outbox
+sendLoop man debug sid source target addr outbox done = do
+  ms <- atomically $ readMany1 outbox
+  let (eom,ms') = scanMsgs ms
+  sendMsg man debug sid source target addr ms'
+  if eom
+     then atomically $ putTMVar done ()
+     else sendLoop man debug sid source target addr outbox done
+
 
 mkSenders
   :: (HttpCS g)
@@ -168,11 +180,12 @@ mkSenders
   -> String -- ^ Store ID
   -> RId -- ^ Replica ID
   -> Map RId (String,Int)
-  -> IO (Map RId (TChan (BMsg' g), ThreadId))
+  -> IO (Map RId (TChan (Either () (BMsg' g)), TMVar ()))
 mkSenders debug sid rid addrs = do
   man <- Client.newManager Client.defaultManagerSettings
   let f i addr = do
         outbox <- newTChanIO
-        tid <- forkIO $ sendLoop man debug sid rid i addr outbox
-        return (outbox, tid)
+        done <- newEmptyTMVarIO
+        tid <- forkIO $ sendLoop man debug sid rid i addr outbox done
+        return (outbox, done)
   Map.traverseWithKey f addrs

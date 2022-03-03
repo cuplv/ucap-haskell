@@ -32,6 +32,8 @@ data HRSettings g = HRSettings
   { _hsAddrs :: Addrs
   , _hsInitState :: GState g
   , _hsInitCoord :: g
+  , _hsStoreId :: String
+  , _hsLocalId :: RId
   }
 
 makeLenses ''HRSettings
@@ -121,7 +123,9 @@ debugLoop dbchan sdConfirm trDone shutdown = do
                               <$> mapM_ takeTMVar sdConfirm)
   case r of
     Debug s -> putStrLn s >> debugLoop dbchan sdConfirm trDone shutdown
-    ScriptsDone -> shutdown >> debugLoop dbchan sdConfirm trDone shutdown
+    ScriptsDone -> do
+      shutdown
+      debugLoop dbchan sdConfirm trDone shutdown
     AllDone -> return ()
 
 demoRep
@@ -136,15 +140,24 @@ demoRep
   -> IO (Either () ((), ExprData), GState g)
 demoRep shutdown allReady tq tstatus debug rid sets = do
   inbox <- newTChanIO
-  send <- mkSender debug (sets ^. hsAddrs)
+  senders <- mkSenders
+               debug
+               (sets ^. hsStoreId)
+               (sets ^. hsLocalId)
+               (sets ^. hsAddrs)
+  let send target msg = do
+        let chan = fst (senders Map.! target)
+        atomically $ writeTChan chan (Right msg)
+      eom = mapM_ (\c -> atomically $ writeTChan (fst c) (Left ())) senders
   let port = case Map.lookup rid (sets ^. hsAddrs) of
                Just (_,p) -> p
                Nothing -> error $ rid ++ " has no port"
-  tid <- forkIO $ mkListener port inbox debug
+  tid <- forkIO $ mkListener port inbox debug (sets ^. hsStoreId)
   let info = MRepInfo
         { _hrId = rid
         , _hrAddrs = sets ^. hsAddrs
         , _hrSend = send
+        , _hrEOM = eom
         , _hrInbox = inbox
         , _hrDebug = debug
         , _hrShutdown = shutdown
@@ -157,5 +170,7 @@ demoRep shutdown allReady tq tstatus debug rid sets = do
          (sets^.hsInitState)
          (sets^.hsInitCoord)
          info
+  debug DbTransport 1 $ "Waiting for senders to finish"
+  atomically $ mapM_ (takeTMVar . snd) senders
   killThread tid
   return a

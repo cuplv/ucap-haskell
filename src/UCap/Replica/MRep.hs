@@ -128,7 +128,8 @@ type Addrs = Map RId (String,Int)
 data MRepInfo g e
   = MRepInfo { _hrId :: RId
              , _hrAddrs :: Addrs
-             , _hrSend :: RId -> RId -> BMsg g e -> IO ()
+             , _hrSend :: RId -> BMsg g e -> IO ()
+             , _hrEOM :: IO ()
              , _hrInbox :: TChan (TBM g e)
              , _hrDebug :: Debug
              , _hrShutdown :: TMVar ()
@@ -213,6 +214,13 @@ evalMRepScript' sc s0 g0 info =
              mrRequestAll
              a <- mrAwaitScript sc
              d <- mrCollectData
+
+             -- Put an "end of messages" notification in senders'
+             -- outboxes so that they do not wait for further messages
+             -- after they finish their queues.
+             eom <- view hrEOM
+             liftIO eom
+
              return (a,d)
   in do (a,m) <- runMRep m st info
         return (a, m ^. hrCurrentState)
@@ -320,9 +328,8 @@ mrCoord = do
 
 mrUnicast :: (MCS g) => RId -> BMsg' g -> MRepT g ()
 mrUnicast i msg = do
-  rid <- view hrId
   send <- view hrSend
-  liftIO $ send rid i msg
+  liftIO $ send i msg
 
 mrBroadcast :: (MCS g) => BMsg' g -> MRepT g ()
 mrBroadcast msg = do
