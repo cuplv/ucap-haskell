@@ -27,6 +27,7 @@ import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
+import System.IO (hPutStrLn, stderr)
 
 data HRSettings g = HRSettings
   { _hsAddrs :: Addrs
@@ -122,7 +123,9 @@ debugLoop dbchan sdConfirm trDone shutdown = do
                     `orElse` (const AllDone
                               <$> mapM_ takeTMVar sdConfirm)
   case r of
-    Debug s -> putStrLn s >> debugLoop dbchan sdConfirm trDone shutdown
+    Debug s -> do
+      hPutStrLn stderr s
+      debugLoop dbchan sdConfirm trDone shutdown
     ScriptsDone -> do
       shutdown
       debugLoop dbchan sdConfirm trDone shutdown
