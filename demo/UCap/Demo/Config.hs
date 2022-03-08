@@ -23,12 +23,13 @@ import Data.Text (pack)
 import Data.Time.Clock
 import Dhall
 
-type CombinedConfig e = (Addrs, LocalConfig, [Experiment e])
+type CombinedConfig e = (Addrs, LocalConfig, [Experiment e], Int)
 
-dCombinedConfig d = record $ (,,)
+dCombinedConfig d = record $ (,,,)
   <$> field "network" (Dhall.map string dAddr)
   <*> field "local" dLocalConfig
   <*> field "experiments" (list $ dExperiment d)
+  <*> field "index" (fromIntegral <$> natural)
 
 
 data Experiment e

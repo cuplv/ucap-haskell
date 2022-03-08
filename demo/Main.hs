@@ -56,20 +56,17 @@ writeCsvReport fp eid conf (ss,fs) kind = do
 main :: IO ()
 main = do
   args <- getArgs
-  (gc,lc,es) <- case args of
-    -- [gc,lc] -> (,) <$> dhallInput (dCombinedConfig dSimpleEx) gc
-    --                <*> dhallInput dLocalConfig lc
+  (gc,lc,es,idx) <- case args of
     [cc] -> dhallInput (dCombinedConfig dSimpleEx) cc
     _ -> error $ "Must call with 2 args (global, local) \
                  \or 1 arg (combined)"
-  mapM_ (runExpr gc lc) (zip [0..] es)
+  mapM_ (runExpr gc lc) (zip [idx..] es)
 
 runExpr :: Addrs -> LocalConfig -> (Int, Experiment SimpleEx) -> IO ()
 runExpr addrs lc (eid,ex) = do
   let exconf = exConf ex
       sid = "store" ++ show eid
       rid = lcId lc
-      -- addrs = gcNetwork gc
       trs = case exSetup ex of
               _ -> repeat $ subOp 1 >>> pure ()
 
@@ -83,10 +80,6 @@ runExpr addrs lc (eid,ex) = do
                                              ++ "] " ++ s
                                     in atomically . writeTChan c $ s')
         Nothing -> \_ _ _ -> return ()
-  -- let debug s = case dbchan of
-  --                 Just c | lcDebug lc >= 1 -> 
-  --                   atomically . writeTChan c $ "=> " ++ s
-  --                 _ -> return ()
 
   tq <- newTChanIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map

@@ -1,4 +1,6 @@
 \(rid : Text) ->
+  let Prelude = ./Prelude.dhall
+
   let lib = ./lib.dhall
 
   let debug = lib.defaultDebug // { setup = 1 }
@@ -22,25 +24,11 @@
         \(rate : Double) -> { rate, duration = exprDuration, setup = lib.token }
 
   let experiments =
-        [ escrow 200.0
-        , escrow 400.0
-        , escrow 600.0
-        , escrow 800.0
-        , escrow 1000.0
-        , escrow 1200.0
-        , escrow 1400.0
-        , escrow 1600.0
-        , token 200.0
-        , token 400.0
-        , token 600.0
-        , token 800.0
-        , token 1000.0
-        , token 1200.0
-        , token 1400.0
-        , token 1600.0
-        ]
+          Prelude.List.map Double lib.Experiment escrow (lib.mkDRange 50 50 24)
+          # Prelude.List.map Double lib.Experiment token (lib.mkDRange 50 50 24)
 
   in  { local = { id = rid, debug, outPath = Some "./results/${rid}.csv" }
       , network = toMap peers
       , experiments
+      , index = 0
       }
