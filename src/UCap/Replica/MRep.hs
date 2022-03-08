@@ -133,7 +133,7 @@ data MRepInfo g e
              , _hrInbox :: TChan (TBM g e)
              , _hrDebug :: Debug
              , _hrShutdown :: TMVar ()
-             , _hrGetQueue :: TChan (Int, Op' g)
+             , _hrGetQueue :: TQueue (Int, Op' g)
              , _hrTrStart :: TVar (Map Int UTCTime)
              , _hrAllReady :: TMVar ()
              }
@@ -501,7 +501,7 @@ mrWaitChange = do
   let stm = 
         (MrGotMsg <$> readTChan chan)
         `orElse` (MrShutdown <$ takeTMVar sd)
-        `orElse` (MrNewTransact <$> readTChan tq)
+        `orElse` (MrNewTransact <$> readTQueue tq)
   cmd <- liftIO . atomically $ stm
   case cmd of
     MrGotMsg msg -> handleMsg msg >>= \case

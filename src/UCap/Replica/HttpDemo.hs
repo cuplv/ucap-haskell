@@ -74,7 +74,7 @@ data DebugLoop
   | AllDone
 
 feedLoop
-  :: (TChan (Int, a), TVar (Map Int UTCTime), TMVar ())
+  :: (TQueue (Int, a), TVar (Map Int UTCTime), TMVar ())
   -> ExConf
   -> Int
   -> StateT (FeedLoopState a) IO ()
@@ -98,7 +98,7 @@ feedLoop (tq,ts,done) conf peerCount = do
   flsTrs .= later
 
   liftIO.atomically $ modifyTVar ts (<> Map.fromList (zip tids $ repeat t))
-  liftIO . atomically $ mapM_ (writeTChan tq) (zip tids now)
+  liftIO . atomically $ mapM_ (writeTQueue tq) (zip tids now)
   liftIO $ threadDelay 1000
 
   t2 <- liftIO getCurrentTime
@@ -135,7 +135,7 @@ demoRep
   :: (HttpCS g)
   => TMVar () -- ^ shutdown command input
   -> TMVar () -- ^ All-ready notifier
-  -> TChan (Int, Op' g) -- ^ Transaction queue
+  -> TQueue (Int, Op' g) -- ^ Transaction queue
   -> TVar (Map Int UTCTime) -- ^ Transaction start times
   -> Debug -- ^ Debug action
   -> RId

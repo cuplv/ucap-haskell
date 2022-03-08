@@ -81,7 +81,7 @@ runExpr addrs lc (eid,ex) = do
                                     in atomically . writeTChan c $ s')
         Nothing -> \_ _ _ -> return ()
 
-  tq <- newTChanIO -- transaction queue
+  tq <- newTQueueIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
   done <- newEmptyTMVarIO -- termination notification
   shutdown <- newEmptyTMVarIO -- termination control
