@@ -490,7 +490,16 @@ mrCheckChange = do
 data MrChange g e
   = MrGotMsg (TBM g e)
   | MrShutdown
-  | MrNewTransact (Int, Op' g)
+  | MrNewTransact [(Int, Op' g)]
+
+{- | Like 'Control.Concurrent.STM.TQueue.flushTQueue', but it retries
+   when the queue is empty rather than returning @[]@. -}
+flushTQueue1 :: TQueue a -> STM [a]
+flushTQueue1 q = do
+  b <- isEmptyTQueue q
+  if not b
+     then flushTQueue q
+     else retry
 
 mrWaitChange :: (MCS g) => MRepT g ()
 mrWaitChange = do
@@ -501,7 +510,7 @@ mrWaitChange = do
   let stm = 
         (MrGotMsg <$> readTChan chan)
         `orElse` (MrShutdown <$ takeTMVar sd)
-        `orElse` (MrNewTransact <$> readTQueue tq)
+        `orElse` (MrNewTransact <$> flushTQueue1 tq)
   cmd <- liftIO . atomically $ stm
   case cmd of
     MrGotMsg msg -> handleMsg msg >>= \case
@@ -515,6 +524,6 @@ mrWaitChange = do
     MrShutdown -> do
       hrLiveNodes %= setFinished rid
       mrBroadcast =<< mkPong
-    MrNewTransact (n,op) -> do
-      mrDebug 3 "Got new transaction."
-      hrQueue %= Map.insert n op
+    MrNewTransact ops -> do
+      mrDebug 3 "Got new transactions."
+      hrQueue %= Map.union (Map.fromList ops)

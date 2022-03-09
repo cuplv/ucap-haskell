@@ -81,9 +81,9 @@ feedLoop
 feedLoop (tq,ts,done) conf peerCount = do
   idx <- use flsIndex
   t0 <- use flsStartTime
-  t <- liftIO getCurrentTime
+  tNow <- liftIO getCurrentTime
   let peerRate = exConfRate conf / fromIntegral peerCount
-  let secElapsed = nominalDiffTimeToSeconds $ diffUTCTime t t0
+  let secElapsed = nominalDiffTimeToSeconds $ diffUTCTime tNow t0
   let newIdx = floor (toRational peerRate * toRational secElapsed)
   let burst = newIdx - idx
   let tids = [idx..(newIdx - 1)]
@@ -97,7 +97,16 @@ feedLoop (tq,ts,done) conf peerCount = do
   flsIndex .= newIdx
   flsTrs .= later
 
-  liftIO.atomically $ modifyTVar ts (<> Map.fromList (zip tids $ repeat t))
+  let reqOffset tid = secondsToNominalDiffTime.realToFrac $
+        fromIntegral tid / exConfRate conf
+      calcTime tid =
+        let t' = (addUTCTime (reqOffset tid) t0)
+        in if tNow < t'
+              then error $ "tr requested too early: "
+                           ++ show tNow ++ " vs. " ++ show t'
+              else (tid, t')
+
+  liftIO.atomically $ modifyTVar ts (<> Map.fromList (map calcTime tids))
   liftIO . atomically $ mapM_ (writeTQueue tq) (zip tids now)
   liftIO $ threadDelay 1000
 
