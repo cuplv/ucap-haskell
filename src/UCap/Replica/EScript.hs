@@ -186,10 +186,10 @@ transactQueue' debug = do
       bs = map bof $ Map.toList m
   liftIO $ debug dbc 2 "transactQueue'"
   awaitSD' . firstOf $
-    [ (lift <$> trBlock grantRequests') `andThen_` transactQueue' debug
-    , (lift <$> trBlock acceptGrants') `andThen_` transactQueue' debug ]
+    [ (lift <$> trBlock acceptGrants') `andThen_` transactQueue' debug ]
     ++ bs
     ++ [ consumeQueue debug `andThen_` transactQueue' debug ]
+    ++ [ (lift <$> trBlock grantRequests') `andThen_` transactQueue' debug ]
 
 consumeQueue
   :: (CoordSys g)
