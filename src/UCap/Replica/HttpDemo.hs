@@ -97,8 +97,7 @@ feedLoop (tq,ts,done) conf peerCount = do
   flsIndex .= newIdx
   flsTrs .= later
 
-  let reqOffset tid = secondsToNominalDiffTime.realToFrac $
-        fromIntegral tid / exConfRate conf
+  let reqOffset tid = realToFrac $ fromIntegral tid / peerRate
       calcTime tid =
         let t' = (addUTCTime (reqOffset tid) t0)
         in if tNow < t'

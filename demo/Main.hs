@@ -112,12 +112,15 @@ runExpr addrs lc (eid,ex) = do
                           })
 
     (\case
-        Right (Right (_,d),s) -> do
+        Right (Right (_,(ss,fs)),s) -> do
           debug DbSetup 2 $ "Terminated with state: " ++ show s
-          debugReport debug (exConf ex) d
+          let t0 = ss Map.! 0
+              duration = exConfDuration (exConf ex)
+              fs' = Map.filter (< addUTCTime duration t0) fs
+          debugReport debug (exConf ex) (ss,fs')
           case lcOutPath lc of
             Just fp ->
-              writeCsvReport fp eid (exConf ex) d (show $ exSetup ex)
+              writeCsvReport fp eid (exConf ex) (ss,fs') (show $ exSetup ex)
             Nothing -> return ()
           atomically $ putTMVar confirm ()
         Left e -> do
