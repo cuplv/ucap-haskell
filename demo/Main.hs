@@ -36,21 +36,25 @@ writeCsvReport :: FilePath -> Int -> ExConf -> ExprData -> String -> IO ()
 writeCsvReport fp eid conf (ss,fs) kind = do
   let total = Map.size fs
       rate = exConfRate conf
-      thp = 
+      thp :: Double
+      thp =
         fromIntegral total
-        / nominalDiffTimeToSeconds (exConfDuration conf)
-      latn = Map.foldlWithKey f 0 fs * fromIntegral 1000
-        where f t k end =
-                let start = fromJust $ Map.lookup k ss
-                    tk = nominalDiffTimeToSeconds (diffUTCTime end start)
-                         / fromIntegral total
-                in t + tk
+        / realToFrac (exConfDuration conf)
+      totalLatn = Map.foldlWithKey f 0 fs
+        where f t k end = let start = fromJust $ Map.lookup k ss
+                          in t + diffUTCTime end start
+      avgLatn :: Double
+      avgLatn =
+        if total == 0
+           then 0
+           else (realToFrac totalLatn / fromIntegral total)
+                * 1000
       csvl = show eid ++ ","
              ++ kind ++ ","
              ++ show rate ++ ","
              ++ show total ++ ","
              ++ show thp ++ ","
-             ++ show latn ++ "\n"
+             ++ show avgLatn ++ "\n"
   appendFile fp csvl
 
 main :: IO ()
