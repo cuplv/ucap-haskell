@@ -89,7 +89,9 @@ instance (EffectDom e) => RwState (ExWr g e) where
   type ReadRep (ExWr g e) = ExRd g (EDState e)
 
 data ExLocal g
-  = ExLocal { _exlWaiting :: Map Int (Block' (EScriptT g) ()) }
+  = ExLocal { _exlWaiting :: Map Int (Block' (EScriptT g) ())
+            , _exlSinceGrant :: Int
+            }
 
 
 
@@ -171,25 +173,43 @@ transactQueue
   => Debug
   -> EScriptT g ()
 transactQueue debug =
-  evalStateT (transactQueue' debug) (ExLocal Map.empty)
+  evalStateT (transactQueue' debug) $ ExLocal
+    { _exlWaiting = Map.empty
+    , _exlSinceGrant = 0
+    }
 
 transactQueue'
   :: (CoordSys g)
   => Debug
   -> StateT (ExLocal g) (EScriptT g) ()
 transactQueue' debug = do
+  sg <- use exlSinceGrant
   m <- use exlWaiting
   let bof (n,b) = (lift <$> b) `andThen_` do
+        exlSinceGrant += 1
         lift.writeState $ ExWr mempty [(n,TermComplete)] []
         exlWaiting %= Map.delete n
         transactQueue' debug
       bs = map bof $ Map.toList m
   liftIO $ debug dbc 2 "transactQueue'"
+  let nonGrants =
+        [(lift <$> trBlock acceptGrants') `andThen_`
+         (do exlSinceGrant += 1
+             transactQueue' debug)]
+        ++ bs
+        ++ [consumeQueue debug `andThen_`
+            (do exlSinceGrant += 1
+                transactQueue' debug)]
+  let grant =
+        [(lift <$> trBlock grantRequests') `andThen_`
+         (do exlSinceGrant .= 0
+             transactQueue' debug)]
   awaitSD' . firstOf $
-    [ (lift <$> trBlock acceptGrants') `andThen_` transactQueue' debug ]
-    ++ bs
-    ++ [ consumeQueue debug `andThen_` transactQueue' debug ]
-    ++ [ (lift <$> trBlock grantRequests') `andThen_` transactQueue' debug ]
+    -- When the "grant" action has been skipped over 10 times, start
+    -- trying it first.
+    if sg >= 10
+       then grant ++ nonGrants
+       else nonGrants ++ grant
 
 consumeQueue
   :: (CoordSys g)
