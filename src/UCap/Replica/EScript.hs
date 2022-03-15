@@ -178,6 +178,8 @@ transactQueue debug =
     , _exlSinceGrant = 0
     }
 
+grantThreshold = 100
+
 transactQueue'
   :: (CoordSys g)
   => Debug
@@ -191,7 +193,7 @@ transactQueue' debug = do
         exlWaiting %= Map.delete n
         transactQueue' debug
       bs = map bof $ Map.toList m
-  liftIO $ debug dbc 2 "transactQueue'"
+  liftIO $ debug dbc 3 "transactQueue'"
   let nonGrants =
         [(lift <$> trBlock acceptGrants') `andThen_`
          (do exlSinceGrant += 1
@@ -203,11 +205,15 @@ transactQueue' debug = do
   let grant =
         [(lift <$> trBlock grantRequests') `andThen_`
          (do exlSinceGrant .= 0
+             liftIO . debug dbc 1 $ "Did grant"
              transactQueue' debug)]
+  if sg >= grantThreshold
+     then liftIO . debug dbc 1 $ "Trying grant first"
+     else return ()
   awaitSD' . firstOf $
     -- When the "grant" action has been skipped over 10 times, start
     -- trying it first.
-    if sg >= 10
+    if sg >= grantThreshold
        then grant ++ nonGrants
        else nonGrants ++ grant
 
@@ -219,7 +225,7 @@ consumeQueue debug = do
   new <- view exrQueue <$> checkState
   let newIds = Map.keys new
   not (null newIds) ?> do
-    liftIO.debug dbc 1 $ "Consumed " ++ show newIds
+    liftIO.debug dbc 2 $ "Consumed " ++ show newIds
     lift.writeState $ ExWr mempty [] newIds
     blocks <- lift $ traverse
                        (\t -> trBlock <$> (trScript . transact $ t))
