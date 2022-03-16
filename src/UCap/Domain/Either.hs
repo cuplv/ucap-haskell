@@ -17,6 +17,9 @@ data EitherE e1 e2 s1 s2
   | SetR s2
   deriving (Show,Eq,Ord,Generic)
 
+instance (ToJSON e1, ToJSON e2, ToJSON s1, ToJSON s2) => ToJSON (EitherE e1 e2 s1 s2)
+instance (FromJSON e1, FromJSON e2, FromJSON s1, FromJSON s2) => FromJSON (EitherE e1 e2 s1 s2)
+
 type EitherE' e1 e2 = EitherE e1 e2 (EDState e1) (EDState e2)
 
 instance
@@ -53,6 +56,10 @@ instance
 data EitherC c1 c2 s1 s2
   = EitherC { overL :: ConstC c1 s1, overR :: ConstC c2 s2 }
   deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON c1, ToJSON c2, ToJSON s1, ToJSON s2) => ToJSON (EitherC c1 c2 s1 s2)
+
+instance (FromJSON c1, FromJSON c2, Ord s1, FromJSON s1, Ord s2, FromJSON s2) => FromJSON (EitherC c1 c2 s1 s2)
 
 type EitherC' c1 c2 = EitherC c1 c2 (CState c1) (CState c2)
 

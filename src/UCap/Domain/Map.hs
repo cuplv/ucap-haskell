@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -52,6 +53,14 @@ deleteE k = mapE k $ SetL ()
 
 data MapE k e
   = MapE { emap :: Map k (KeyE e) }
+  deriving (Generic)
+
+deriving instance (Show k, Show e, Show (EDState e)) => Show (MapE k e)
+deriving instance (Eq k, Eq e, Eq (EDState e)) => Eq (MapE k e)
+deriving instance (Ord k, Ord e, Ord (EDState e)) => Ord (MapE k e)
+
+instance (ToJSON k, ToJSONKey k, ToJSON e, ToJSON (EDState e)) => ToJSON (MapE k e)
+instance (Ord k, FromJSON k, FromJSONKey k, FromJSON e, FromJSON (EDState e)) => FromJSON (MapE k e)
 
 instance (Ord k, EffectDom e) => Semigroup (MapE k e) where
   MapE a1 <> MapE a2 = MapE $ Map.unionWith (<>) a1 a2
@@ -110,6 +119,9 @@ data MapC k c s
   = MapC { _unMapC :: InfMap k (KeyC c s) }
   deriving (Show,Eq,Ord,Generic)
 
+instance (ToJSON k, ToJSONKey k, ToJSON c, ToJSON s) => ToJSON (MapC k c s)
+instance (Ord k, FromJSON k, FromJSONKey k, FromJSON c, Ord s, FromJSON s) => FromJSON (MapC k c s)
+
 type MapC' k c = MapC k c (CState c)
 
 instance (Ord k, Ord s, Semigroup c) => Semigroup (MapC k c s) where
@@ -158,3 +170,7 @@ atMapC :: (Ord k) => k -> Lens' (MapC' k c) c
 atMapC k = lens
   (\(MapC a) -> lowerC . overR . (^. IM.at k) $ a)
   (\(MapC a) c -> MapC $ a & IM.at k .~ onR c)
+
+{-| Capability domain for sets of @a@ represented as maps from @a@ to
+  @()@. -}
+type SetC a = MapC' a (IdentityC ())

@@ -36,6 +36,9 @@ data InfMap k v =
          }
   deriving (Show,Eq,Ord,Generic)
 
+instance (ToJSON k, ToJSONKey k, ToJSON v) => ToJSON (InfMap k v)
+instance (Ord k, FromJSON k, FromJSONKey k, FromJSON v) => FromJSON (InfMap k v)
+
 instance (Ord k, Semigroup v) => Semigroup (InfMap k v) where
   (<>) = unionWith (<>)
 
