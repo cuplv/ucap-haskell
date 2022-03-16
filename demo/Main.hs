@@ -2,6 +2,7 @@
 
 import UCap.Coord
 import UCap.Demo.Config
+import UCap.Domain
 import UCap.Lens
 import UCap.Op
 import UCap.Replica.Debug
@@ -11,8 +12,10 @@ import UCap.Replica.HttpDemo
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.State
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import qualified Data.Set as Set
 import Data.Time.Clock
 import System.Environment (getArgs)
 
@@ -66,13 +69,51 @@ main = do
                  \or 1 arg (combined)"
   mapM_ (runExpr gc lc) (zip [idx..] es)
 
+type DemoC = (IntC, SetC Int, SetC Int, SetC Int)
+
+initDemoState :: CState DemoC
+initDemoState = (0, Map.empty, Map.empty, Map.empty)
+
+{-| Check the current number of elements across all three sets, and insert
+  that number as a new element of this replica's assigned set.
+    
+  If this transaction is run under strong consistency, as declared,
+  then the three sets should never end up with duplicate elements.
+  Also, all integers @[0 .. (1 - finalSize)]@ should be
+  represented in the end.
+-}
+mutexTr :: (Monad m) => RId -> Op DemoC m a ()
+mutexTr rid =
+  query idC
+  >>> mapOp (\(_,a,b,c) -> Map.size a + Map.size b + Map.size c)
+  >>> (case rid of
+         "alpha" -> _2ed ^# setAdd >>> pure ()
+         "beta" -> _3ed ^# setAdd >>> pure ()
+         "gamma" -> _4ed ^# setAdd >>> pure ())
+
+parallelTr :: (Monad m) => Op DemoC m a ()
+parallelTr = _1ed ^# subOp 1 >>> pure ()
+
+{-| Check for duplicates among three sets, and list any that are found.
+  If an element is a member of all three sets, it will appear three
+  times in the resulting list. -}
+testDuplicates :: CState DemoC -> [Int]
+testDuplicates (_,a,b,c) =
+  let a' = Set.fromList $ Map.keys a
+      b' = Set.fromList $ Map.keys b
+      c' = Set.fromList $ Map.keys c
+  in Set.toList (Set.intersection a' b')
+     ++ Set.toList (Set.intersection a' c')
+     ++ Set.toList (Set.intersection b' c')
+
 runExpr :: Addrs -> LocalConfig -> (Int, Experiment SimpleEx) -> IO ()
 runExpr addrs lc (eid,ex) = do
   let exconf = exConf ex
       sid = "store" ++ show eid
       rid = lcId lc
       trs = case exSetup ex of
-              _ -> repeat $ subOp 1 >>> pure ()
+              TokenEx -> repeat $ mutexTr rid
+              EscrowEx n b -> repeat parallelTr
 
   dbchan <- if anyDebug (lcDebug lc)
                then Just <$> newTChanIO
@@ -83,7 +124,7 @@ runExpr addrs lc (eid,ex) = do
                                              ++ ":" ++ show dc
                                              ++ "] " ++ s
                                     in atomically . writeTChan c $ s')
-        Nothing -> \_ _ _ -> return ()
+        _ -> \_ _ _ -> return ()
 
   tq <- newTQueueIO -- transaction queue
   ts <- newTVarIO mempty -- transaction results map
@@ -99,26 +140,33 @@ runExpr addrs lc (eid,ex) = do
     (case exSetup ex of
         TokenEx -> demoRep shutdown allReady tq ts debug rid $ 
                      HRSettings { _hsAddrs = addrs
-                                , _hsInitState = 100 :: Int
+                                , _hsInitState = initDemoState
                                 , _hsInitCoord = mkTokenG primary
                                 , _hsStoreId = sid
                                 , _hsLocalId = rid
                                 }
         EscrowEx n b ->
-          let g = initIntEscrow b [primary] $
-                    Map.fromList [(primary,(n,0))]
+          let g1 = initIntEscrow b [primary] $
+                     Map.fromList [(primary,(n,0))]
+              g = (g1,IdentityG,IdentityG,IdentityG)
           in demoRep shutdown allReady tq ts debug rid $ 
                HRSettings { _hsAddrs = addrs
-                          , _hsInitState = n
+                          , _hsInitState = initDemoState
                           , _hsInitCoord = g
                           , _hsStoreId = sid
                           , _hsLocalId = rid
-                          })
+                          }
+    )
 
     (\case
         Right (Right (_,(ss,fs)),(s,g)) -> do
-          debug DbSetup 2 $ "Terminated with state: " ++ show s
-          debug DbSetup 1 $ "Final coord: " ++ g
+          let results = (Map.size (s^._2), Map.size (s^._3), Map.size (s^._4))
+          debug DbSetup 1 $ "Terminated with sizes: " ++ show results
+          debug DbSetup 2 $ "Final coord: " ++ g
+          let dups = testDuplicates s
+          if dups == []
+             then return ()
+             else debug DbSetup 1 $ "(!) Inconsistency: "
           let t0 = ss Map.! 0
               duration = exConfDuration (exConf ex)
               fs' = Map.filter (< addUTCTime duration t0) fs

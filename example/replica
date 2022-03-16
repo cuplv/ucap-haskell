@@ -24,8 +24,8 @@
         \(rate : Double) -> { rate, duration = exprDuration, setup = lib.token }
 
   let experiments =
-          Prelude.List.map Double lib.Experiment escrow (lib.mkDRange 50 50 24)
-          # Prelude.List.map Double lib.Experiment token (lib.mkDRange 50 50 24)
+          Prelude.List.map Double lib.Experiment token (lib.mkDRange 50 50 24)
+          # Prelude.List.map Double lib.Experiment escrow (lib.mkDRange 50 50 24)
 
   in  { local = { id = rid, debug, outPath = Some "./results/${rid}.csv" }
       , network = toMap peers

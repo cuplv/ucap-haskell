@@ -188,6 +188,7 @@ transactQueue' debug = do
   sg <- use exlSinceGrant
   m <- use exlWaiting
   let bof (n,b) = (lift <$> b) `andThen_` do
+        liftIO $ debug dbc 3 "Did a transaction"
         exlSinceGrant += 1
         lift.writeState $ ExWr mempty [(n,TermComplete)] []
         exlWaiting %= Map.delete n
@@ -196,7 +197,8 @@ transactQueue' debug = do
   liftIO $ debug dbc 3 "transactQueue'"
   let nonGrants =
         [(lift <$> trBlock acceptGrants') `andThen_`
-         (do exlSinceGrant += 1
+         (do liftIO $ debug dbc 3 "Doing accept"
+             exlSinceGrant += 1
              transactQueue' debug)]
         ++ bs
         ++ [consumeQueue debug `andThen_`
@@ -215,7 +217,7 @@ transactQueue' debug = do
     -- trying it first.
     if sg >= grantThreshold
        then grant ++ nonGrants
-       else nonGrants ++ grant
+       else nonGrants ++ grant ++ [(lift.liftIO) (debug dbc 1 "Did nothing") >> notReady]
 
 consumeQueue
   :: (CoordSys g)

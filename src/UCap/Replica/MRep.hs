@@ -378,6 +378,7 @@ data MsgResult
 handleMsg :: (MCS g) => TBM' g -> MRepT g MsgResult
 handleMsg (i,msg) = do
   rid <- view hrId
+  mrDebug 2 $ "Handling message..."
   case msg of
     BNewEffect v e g -> do
       mrDebug 1 $ "Handle BNewEffect from " ++ show i ++ " " ++ show v
