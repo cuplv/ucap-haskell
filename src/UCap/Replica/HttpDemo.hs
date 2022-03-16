@@ -148,7 +148,7 @@ demoRep
   -> Debug -- ^ Debug action
   -> RId
   -> HRSettings g
-  -> IO (Either () ((), ExprData), GState g)
+  -> IO (Either () ((), ExprData), (GState g, String))
 demoRep shutdown allReady tq tstatus debug rid sets = do
   inbox <- newTChanIO
   senders <- mkSenders
@@ -176,12 +176,12 @@ demoRep shutdown allReady tq tstatus debug rid sets = do
         , _hrTrStart = tstatus
         , _hrAllReady = allReady
         }
-  a <- evalMRepScript'
-         (transactQueue debug)
-         (sets^.hsInitState)
-         (sets^.hsInitCoord)
-         info
+  (a,(s,g)) <- evalMRepScript'
+                 (transactQueue debug)
+                 (sets^.hsInitState)
+                 (sets^.hsInitCoord)
+                 info
   debug DbTransport 1 $ "Waiting for senders to finish"
   atomically $ mapM_ (takeTMVar . snd) senders
   killThread tid
-  return a
+  return (a,(s, show g))

@@ -116,8 +116,9 @@ runExpr addrs lc (eid,ex) = do
                           })
 
     (\case
-        Right (Right (_,(ss,fs)),s) -> do
+        Right (Right (_,(ss,fs)),(s,g)) -> do
           debug DbSetup 2 $ "Terminated with state: " ++ show s
+          debug DbSetup 1 $ "Final coord: " ++ g
           let t0 = ss Map.! 0
               duration = exConfDuration (exConf ex)
               fs' = Map.filter (< addUTCTime duration t0) fs

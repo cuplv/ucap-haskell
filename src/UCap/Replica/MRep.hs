@@ -194,7 +194,7 @@ evalMRepScript'
   -> GState g
   -> g
   -> MRepInfo g (GEffect g)
-  -> IO (Either () (a, ExprData),GState g)
+  -> IO (Either () (a, ExprData),(GState g, g))
 evalMRepScript' sc s0 g0 info =
   let st = MRepState { _hrInitState = s0
                      , _hrCurrentState = s0
@@ -223,7 +223,7 @@ evalMRepScript' sc s0 g0 info =
 
              return (a,d)
   in do (a,m) <- runMRep m st info
-        return (a, m ^. hrCurrentState)
+        return (a, (m ^. hrCurrentState, m ^. hrCoord))
 
 
 mrAllIds :: (MCS g) => MRepT g [RId]
