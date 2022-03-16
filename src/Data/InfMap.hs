@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Data.InfMap
-  ( InfMap
+  ( InfMap (..)
   , uniform
   , fromList
   , fromMap
@@ -24,6 +24,7 @@ import UCap.Domain.Classes
 import Data.Aeson
 import Data.Bifunctor
 import Data.Biapplicative
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
@@ -123,7 +124,17 @@ unionWithBia
   -> InfMap k a1
   -> InfMap k a2
   -> p (InfMap k b1) (InfMap k b2)
-unionWithBia f (InfMap bv1 m1) (InfMap bv2 m2) = undefined
+unionWithBia f (InfMap bv1 m1) (InfMap bv2 m2) =
+  let ks = List.nub $ Map.keys m1 ++ Map.keys m2
+      m = foldl (\a k -> Map.insert k k a) Map.empty ks
+      tf k = case (Map.lookup k m1, Map.lookup k m2) of
+               (Just v1, Just v2) -> f v1 v2
+               (Just v1, Nothing) -> f v1 bv2
+               (Nothing, Just v2) -> f bv1 v2
+               _ -> error "Key is not in either map"
+  in bipure InfMap InfMap
+     <<*>> f bv1 bv2
+     <<*>> traverseBia tf m
 
 union :: (Ord k) => InfMap k v -> InfMap k v -> InfMap k v
 union = unionWith (\a _ -> a)

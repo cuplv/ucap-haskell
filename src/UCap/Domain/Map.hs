@@ -7,7 +7,7 @@
 
 module UCap.Domain.Map where
 
-import Data.InfMap (InfMap)
+import Data.InfMap (InfMap (..))
 import qualified Data.InfMap as IM
 import Data.InfSet (InfSet)
 import qualified Data.InfSet as IS
@@ -119,6 +119,10 @@ data MapC k c s
   = MapC { _unMapC :: InfMap k (KeyC c s) }
   deriving (Show,Eq,Ord,Generic)
 
+normMapC :: (Ord k, Ord s, BMeet c) => MapC k c s -> MapC k c s
+normMapC c@(MapC (InfMap bv vs)) | uniC <=? bv = uniC
+                                 | otherwise = c
+
 instance (ToJSON k, ToJSONKey k, ToJSON c, ToJSON s) => ToJSON (MapC k c s)
 instance (Ord k, FromJSON k, FromJSONKey k, FromJSON c, Ord s, FromJSON s) => FromJSON (MapC k c s)
 
@@ -132,12 +136,14 @@ instance (Ord k, Ord s, Monoid c) => Monoid (MapC k c s) where
 
 instance (Ord k, Ord s, Meet c) => Meet (MapC k c s) where
   meet (MapC m1) (MapC m2) = MapC (meet m1 m2)
+  MapC m1 <=? MapC m2 = m1 <=? m2
 
 instance (Ord k, Ord s, BMeet c) => BMeet (MapC k c s) where
   meetId = MapC meetId
 
-instance (Ord k, Ord s, Split c) => Split (MapC k c s) where
-  split (MapC m1) (MapC m2) = failToEither $ MapC <<$$>> splitWF m1 m2
+instance (Ord k, Ord s, BMeet c, Split c) => Split (MapC k c s) where
+  split (MapC m1) (MapC m2) = failToEither $
+    (normMapC . MapC) <<$$>> splitWF m1 m2
 
 instance 
   ( Ord k

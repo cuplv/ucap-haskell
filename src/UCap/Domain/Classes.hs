@@ -95,8 +95,6 @@ instance
 class Meet a where
   meet :: a -> a -> a
   (<=?) :: a -> a -> Bool
-  a <=? b | compareP a b == Just LT = True
-          | otherwise = False
 
   compareP :: a -> a -> Maybe Ordering
   compareP a b | a <=? b && b <=? a = Just EQ

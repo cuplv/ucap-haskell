@@ -1,5 +1,7 @@
 module Data.InfMapTests (testInfMap) where
 
+import UCap.Domain (meetId, (<=?))
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.InfMap (InfMap)
@@ -24,4 +26,16 @@ testInfMap = testGroup "InfMap"
                        (IM.uniform 3) 
                        (IM.fromList 2 [("a",5),("b",6)]))
       @?= 8
+  , testCase "Compare" $
+      (IM.uniform () :: InfMap Int ()) <=? IM.uniform () @?= True
+  , testCase "Compare 2" $
+      (IM.uniform () :: InfMap Int ()) <=? meetId @?= True
+  , testCase "Compare 3" $
+      meetId <=? (mempty :: InfMap Int ()) @?= True
+  , testCase "Compare 3.1" $
+      meetId == (mempty :: InfMap Int ()) @?= True
+  , testCase "Compare 4" $
+      (meetId :: InfMap Int ()) <=? meetId @?= True
+  , testCase "Compare 5" $
+      (IM.fromList () [(1,())]) <=? meetId @?= True
   ]
