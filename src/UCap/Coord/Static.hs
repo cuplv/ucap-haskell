@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -11,6 +12,9 @@ import UCap.Coord.Classes
 import UCap.Domain.Classes
 import UCap.Domain.Identity
 
+import Data.Aeson
+import GHC.Generics
+
 {-| The 'IdentityG' coordination system is for static, read-only data.
   It fixes all replicas with empty local capabilities, thus giving
   them all full read capabilities.
@@ -21,7 +25,10 @@ import UCap.Domain.Identity
 'resolveEffect' i 'idE' 'IdentityG' = 'Right' 'id'
 @
 -}
-data IdentityG i c = IdentityG deriving (Show,Eq,Ord)
+data IdentityG i c = IdentityG deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON (IdentityG i c)
+instance FromJSON (IdentityG i c)
 
 instance Semigroup (IdentityG i c) where
   g1 <> _ = g1
@@ -44,7 +51,10 @@ instance (Ord i, Cap c, Eq (CEffect c)) => CoordSys (IdentityG i c) where
                                , capsWrite = idC
                                }
 
-data UniversalG i c = UniversalG deriving (Show,Eq,Ord)
+data UniversalG i c = UniversalG deriving (Show,Eq,Ord,Generic)
+
+instance ToJSON (UniversalG i c)
+instance FromJSON (UniversalG i c)
 
 instance Semigroup (UniversalG i c) where
   g1 <> _ = g1
