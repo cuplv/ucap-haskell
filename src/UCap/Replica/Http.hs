@@ -19,7 +19,7 @@ import Control.Concurrent (forkIO, ThreadId)
 import Control.Concurrent.STM
 import qualified Control.Exception.Base as Exception
 import Data.Aeson
-import Data.Map
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Network.HTTP.Client as Client
 import Network.Wai
@@ -76,7 +76,7 @@ msgGetter chan debug sid request respond = do
       r <- respond $ responseLBS status200 [] ""
       if msid == sid
          then atomically $ mapM_' (\msg -> writeTChan chan (source,msg)) msgs
-         else debug DbTransport 1 $ "Dropping msg for store " ++ show msid
+         else debug DbTransport 2 $ "Dropping msg for store " ++ show msid
       return r
     Nothing -> do
       debug DbTransport 1 $ "Failed to decode msg"
@@ -94,10 +94,10 @@ mkListener port chan debug sid = do
 
 dbLevel :: BMsg' g -> Int
 dbLevel = \case
-  BPing _ _ -> 4
-  BPong _ _ -> 4
-  BCoord _ _ -> 3
-  _ -> 2
+  BPing _ _ -> 5
+  BPong _ _ -> 5
+  BCoord _ _ -> 4
+  _ -> 3
 
 sendMsg
   :: (HttpCS g)
@@ -111,7 +111,7 @@ sendMsg
   -> IO ()
 sendMsg man debug sid source target (host,port) msgs = do
   if length msgs > 1
-     then debug DbTransport 1 $ "Sending " ++ show (length msgs)
+     then debug DbTransport 2 $ "Sending " ++ show (length msgs)
                                 ++ " msgs to " ++ target
      else return ()
   initialRequest <- Client.parseRequest $
@@ -127,13 +127,22 @@ sendMsg man debug sid source target (host,port) msgs = do
   Exception.catch (Client.httpLbs req man >> return ()) $ \e ->
     case e of
       Client.HttpExceptionRequest _ (Client.ConnectionFailure _) -> 
-        debug DbTransport 1 $ "failed send to " ++ show target
-                              ++ ", msg " ++ show msgs
+        case findCoord msgs of
+          [] -> debug DbTransport 2 $ "failed send to " ++ show target
+                                      ++ ", msgs " ++ show msgs
+          _ -> debug DbTransport 1 $ "failed coord to " ++ show target
+                                     ++ ", msgs " ++ show msgs
+        -- debug DbTransport 1 $ "failed send to " ++ show target
+        --                       ++ ", msg " ++ show msgs
       Client.HttpExceptionRequest _ (Client.InternalException _) ->
         debug DbTransport 1 $ "internal exception on send to "
-                              ++ show target ++ ", msg " ++ show msgs
+                              ++ show target ++ ", msgs " ++ show msgs
       e -> error $ "unhandled http-client exception: " ++ show e
   return ()
+
+findCoord = filter (\m -> case m of
+                            BCoord _ _ -> True
+                            _ -> False)
 
 {-| Read 0 or more elements from a 'TChan'.  This never retries. -}
 readMany :: TChan a -> STM [a]

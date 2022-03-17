@@ -181,7 +181,7 @@ demoRep shutdown allReady tq tstatus debug rid sets = do
                  (sets^.hsInitState)
                  (sets^.hsInitCoord)
                  info
-  debug DbTransport 1 $ "Waiting for senders to finish"
+  debug DbTransport 2 $ "Waiting for senders to finish"
   atomically $ mapM_ (takeTMVar . snd) senders
   killThread tid
   return (a,(s, show g))
