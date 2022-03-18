@@ -108,8 +108,9 @@ sendMsg
   -> RId -- ^ Target ID
   -> (String,Int) -- ^ Address
   -> [BMsg' g]
+  -> Int -- ^ Retries
   -> IO ()
-sendMsg man debug sid source target (host,port) msgs = do
+sendMsg man debug sid source target (host,port) msgs rtr = do
   if length msgs > 1
      then debug DbTransport 2 $ "Sending " ++ show (length msgs)
                                 ++ " msgs to " ++ target
@@ -134,9 +135,13 @@ sendMsg man debug sid source target (host,port) msgs = do
                                      ++ ", msgs " ++ show msgs
         -- debug DbTransport 1 $ "failed send to " ++ show target
         --                       ++ ", msg " ++ show msgs
-      Client.HttpExceptionRequest _ (Client.InternalException _) ->
+      Client.HttpExceptionRequest _ (Client.InternalException _) -> do
         debug DbTransport 1 $ "internal exception on send to "
                               ++ show target ++ ", msgs " ++ show msgs
+        if rtr > 0
+           then do debug DbTransport 1 $ "Remaining retries: " ++ show (rtr - 1)
+                   sendMsg man debug sid source target (host,port) msgs (rtr - 1)
+           else return ()
       e -> error $ "unhandled http-client exception: " ++ show e
   return ()
 
@@ -177,7 +182,7 @@ sendLoop
 sendLoop man debug sid source target addr outbox done = do
   ms <- atomically $ readMany1 outbox
   let (eom,ms') = scanMsgs ms
-  sendMsg man debug sid source target addr ms'
+  sendMsg man debug sid source target addr ms' 5
   if eom
      then atomically $ putTMVar done ()
      else sendLoop man debug sid source target addr outbox done

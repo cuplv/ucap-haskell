@@ -34,6 +34,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 dbc = DbScript
 
@@ -178,7 +180,7 @@ transactQueue debug =
     , _exlSinceGrant = 0
     }
 
-grantThreshold = 100
+grantThreshold = 2000
 
 transactQueue'
   :: (CoordSys g)
@@ -188,7 +190,9 @@ transactQueue' debug = do
   sg <- use exlSinceGrant
   m <- use exlWaiting
   let bof (n,b) = (lift <$> b) `andThen_` do
-        liftIO $ debug dbc 3 "Did a transaction"
+        if n `mod` 100 == 0
+           then liftIO.debug dbc 1 $ "Finished tr " ++ show n
+           else return ()
         exlSinceGrant += 1
         lift.writeState $ ExWr mempty [(n,TermComplete)] []
         exlWaiting %= Map.delete n
@@ -210,14 +214,14 @@ transactQueue' debug = do
              liftIO . debug dbc 1 $ "Did grant"
              transactQueue' debug)]
   if sg >= grantThreshold
-     then liftIO . debug dbc 1 $ "Trying grant first"
+     then liftIO . debug dbc 2 $ "Trying grant first"
      else return ()
   awaitSD' . firstOf $
     -- When the "grant" action has been skipped over 10 times, start
     -- trying it first.
     if sg >= grantThreshold
        then grant ++ nonGrants
-       else nonGrants ++ grant ++ [(lift.liftIO) (debug dbc 1 "Did nothing") >> notReady]
+       else nonGrants ++ grant
 
 consumeQueue
   :: (CoordSys g)
@@ -227,6 +231,12 @@ consumeQueue debug = do
   new <- view exrQueue <$> checkState
   let newIds = Map.keys new
   not (null newIds) ?> do
+    old <- Set.fromList . Map.keys <$> use exlWaiting
+    let news = Set.fromList newIds
+        dups = Set.intersection old news
+    if dups /= Set.empty
+       then error $ "Duplicated transactions " ++ show dups
+       else return ()
     liftIO.debug dbc 2 $ "Consumed " ++ show newIds
     lift.writeState $ ExWr mempty [] newIds
     blocks <- lift $ traverse
