@@ -146,10 +146,10 @@ demoRep
   -> TQueue (Int, Op' g) -- ^ Transaction queue
   -> TVar (Map Int UTCTime) -- ^ Transaction start times
   -> Debug -- ^ Debug action
-  -> RId
+  -> ExLocalConf (GId g)
   -> HRSettings g
   -> IO (Either () ((), ExprData), (GState g, String))
-demoRep shutdown allReady tq tstatus debug rid sets = do
+demoRep shutdown allReady tq tstatus debug lc sets = do
   inbox <- newTChanIO
   senders <- mkSenders
                debug
@@ -160,12 +160,12 @@ demoRep shutdown allReady tq tstatus debug rid sets = do
         let chan = fst (senders Map.! target)
         atomically $ writeTChan chan (Right msg)
       eom = mapM_ (\c -> atomically $ writeTChan (fst c) (Left ())) senders
-  let port = case Map.lookup rid (sets ^. hsAddrs) of
+  let port = case Map.lookup (lc ^. exlcId) (sets ^. hsAddrs) of
                Just (_,p) -> p
-               Nothing -> error $ rid ++ " has no port"
+               Nothing -> error $ (lc ^. exlcId) ++ " has no port"
   tid <- forkIO $ mkListener port inbox debug (sets ^. hsStoreId)
   let info = MRepInfo
-        { _hrId = rid
+        { _hrLocal = lc
         , _hrAddrs = sets ^. hsAddrs
         , _hrSend = send
         , _hrEOM = eom

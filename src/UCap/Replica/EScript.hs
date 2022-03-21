@@ -15,6 +15,9 @@ module UCap.Replica.EScript
   , ExRd (..)
   , TermStatus (..)
   , liftEScript
+  , ExLocalConf (..)
+  , exlcId
+  , RId
   , module Lang.Rwa
   , module Lang.Rwa.Interpret
   ) where
@@ -36,6 +39,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+
+type RId = String
 
 dbc = DbScript
 
@@ -90,25 +95,32 @@ instance (Monoid g, Monoid e) => Monoid (ExWr g e) where
 instance (EffectDom e) => RwState (ExWr g e) where
   type ReadRep (ExWr g e) = ExRd g (EDState e)
 
+data ExLocalConf i
+  = ExLocalConf { _exlcId :: i
+                , _exlcGrantThreshold :: Maybe Int
+                }
+
+makeLenses ''ExLocalConf
+
 data ExLocal g
   = ExLocal { _exlWaiting :: Map Int (Block' (EScriptT g) ())
             , _exlSinceGrant :: Int
             }
 
-
-
 {-| Script that embeds a transaction store script, and additionally
   interacts with experiments. -}
-type EScriptT g = Rwa (ExWr g (GEffect g)) (ReaderT (GId g) IO)
+type EScriptT g = Rwa (ExWr g (GEffect g))
+                      (ReaderT (ExLocalConf (GId g)) IO)
 
-type EScriptTerm g = RwaTerm (ExWr g (GEffect g)) (ReaderT (GId g) IO)
+type EScriptTerm g = RwaTerm (ExWr g (GEffect g))
+                             (ReaderT (ExLocalConf (GId g)) IO)
 
 makeLenses ''ExLocal
 
 {-| Interpret a transaction store script as an experiment script. -}
 trScript :: ScriptT g IO a -> EScriptT g a
 trScript sc = do
-  rid <- ask
+  rid <- view exlcId
   liftIO (unwrapScript sc rid) >>= \case
     Left (ReadState f) -> wrap . ReadState $
       trScript . f . view exrStore
@@ -120,7 +132,7 @@ trScript sc = do
 trBlock :: Block' (ScriptT g IO) a -> Block' (EScriptT g) a
 trBlock (Block m) = Block $
   do rdv <- ask
-     rid <- lift . lift $ ask
+     rid <- lift . lift $ view exlcId
      r <- liftIO $ runReaderT (runReaderT (runExceptT m)
                                           (rdv^.exrStore))
                               rid
@@ -130,7 +142,7 @@ trBlock (Block m) = Block $
 
 unwrapEScript
   :: EScriptT g a
-  -> GId g
+  -> ExLocalConf (GId g)
   -> IO (Either (EScriptTerm g (EScriptT g a)) a)
 unwrapEScript sc i = runReaderT (nextTerm sc) i
 
@@ -180,8 +192,6 @@ transactQueue debug =
     , _exlSinceGrant = 0
     }
 
-grantThreshold = 2000
-
 transactQueue'
   :: (CoordSys g)
   => Debug
@@ -213,15 +223,12 @@ transactQueue' debug = do
          (do exlSinceGrant .= 0
              liftIO . debug dbc 1 $ "Did grant"
              transactQueue' debug)]
-  if sg >= grantThreshold
-     then liftIO . debug dbc 2 $ "Trying grant first"
-     else return ()
-  awaitSD' . firstOf $
-    -- When the "grant" action has been skipped over 10 times, start
-    -- trying it first.
-    if sg >= grantThreshold
-       then grant ++ nonGrants
-       else nonGrants ++ grant
+  gt <- view exlcGrantThreshold
+  case gt of
+    Just n | sg >= n -> do
+      liftIO . debug dbc 2 $ "Trying grant first"
+      awaitSD' . firstOf $ grant ++ nonGrants
+    _ -> awaitSD' . firstOf $ nonGrants ++ grant
 
 consumeQueue
   :: (CoordSys g)

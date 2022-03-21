@@ -19,6 +19,8 @@ module UCap.Replica.MRep
   , evalMRepScript'
   , Op'
   , ExprData
+  , ExLocalConf (..)
+  , exlcId
   ) where
 
 import Lang.Rwa
@@ -45,8 +47,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
 import GHC.Generics
-
-type RId = String
 
 data PeerStatus
   = PeerStatus (Map RId Bool)
@@ -126,7 +126,7 @@ type Addrs = Map RId (String,Int)
 
 
 data MRepInfo g e
-  = MRepInfo { _hrId :: RId
+  = MRepInfo { _hrLocal :: ExLocalConf (GId g)
              , _hrAddrs :: Addrs
              , _hrSend :: RId -> BMsg g e -> IO ()
              , _hrEOM :: IO ()
@@ -140,6 +140,9 @@ data MRepInfo g e
 
 makeLenses ''MRepInfo
 
+hrId :: Lens' (MRepInfo g e) (GId g)
+hrId = hrLocal . exlcId
+
 type MRepT g = 
        ExceptT () 
          (StateT (MRepState g (GEffect g) (GState g))
@@ -150,7 +153,7 @@ mrDebug n s = do
   f <- view hrDebug
   liftIO $ f DbMainLoop n s
 
-mrOtherIds :: MRepT g [RId]
+mrOtherIds :: (GId g ~ RId) => MRepT g [GId g]
 mrOtherIds = do
   rid <- view hrId
   ids <- Map.keys <$> view hrAddrs
@@ -243,8 +246,8 @@ mrScript
   => EScriptT g a
   -> MRepT g (Either (Block' (EScriptT g) a) a)
 mrScript sc = do
-  rid <- view hrId
-  liftIO (unwrapEScript sc rid) >>= \case
+  lc <- view hrLocal
+  liftIO (unwrapEScript sc lc) >>= \case
     Left (ReadState f) -> mrScript . f =<< mrReadState
     Left (WriteState ctx sc') -> mrWriteState ctx >> mrScript sc'
     Left (Await acs) -> mrTryAwait acs >>= \case
@@ -257,9 +260,9 @@ mrTryAwait
   => Block' (EScriptT g) a
   -> MRepT g (Maybe (EScriptT g a))
 mrTryAwait b = do
-  rid <- view hrId
+  lc <- view hrLocal
   state <- mrReadState
-  liftIO $ runReaderT (checkBlock b state) rid
+  liftIO $ runReaderT (checkBlock b state) lc
 
 mrReadState :: (MCS g) => MRepT g (ExRd g (GState g))
 mrReadState = do

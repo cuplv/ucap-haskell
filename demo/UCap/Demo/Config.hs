@@ -16,7 +16,7 @@ import UCap.Coord
 import UCap.Domain
 import UCap.Replica.Debug
 import UCap.Replica.HttpDemo
-import UCap.Replica.MRep (Addrs,RId)
+import UCap.Replica.MRep (Addrs,RId, ExLocalConf (..))
 
 import qualified Data.Map as Map
 import Data.Text (pack)
@@ -44,14 +44,18 @@ dExperiment d = record $ Experiment
   <*> field "setup" d
 
 data LocalConfig
-  = LocalConfig { lcId :: RId
+  = LocalConfig { lcExLocalConf :: ExLocalConf RId
                 , lcDebug :: DebugConf
                 , lcOutPath :: Maybe FilePath
                 }
 
 dLocalConfig :: Decoder LocalConfig
 dLocalConfig = record $ LocalConfig
-  <$> field "id" string
+  <$> (ExLocalConf
+       <$> field "id" string
+       <*> field "grantThreshold" (Dhall.maybe $ fromIntegral <$> natural))
+  -- <$> field "id" string
+  -- <*> field "grantThreshold" (Dhall.maybe $ fromIntegral <$> natural)
   <*> field "debug" dDebugConf
   <*> field "outPath" (Dhall.maybe string)
 

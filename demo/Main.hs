@@ -110,7 +110,11 @@ runExpr :: Addrs -> LocalConfig -> (Int, Experiment SimpleEx) -> IO ()
 runExpr addrs lc (eid,ex) = do
   let exconf = exConf ex
       sid = "store" ++ show eid
-      rid = lcId lc
+      exlc = lcExLocalConf lc
+      -- exlc = ExLocalConf { _exlcId = lcId lc
+      --                    , _exlcGrantThreshold = lcGrantThreshold lc
+      --                    }
+      rid = exlc ^. exlcId
       trs = case exSetup ex of
               TokenEx -> repeat $ mutexTr rid
               EscrowEx n b -> repeat parallelTr
@@ -138,7 +142,7 @@ runExpr addrs lc (eid,ex) = do
 
   forkFinally
     (case exSetup ex of
-        TokenEx -> demoRep shutdown allReady tq ts debug rid $ 
+        TokenEx -> demoRep shutdown allReady tq ts debug exlc $ 
                      HRSettings { _hsAddrs = addrs
                                 , _hsInitState = initDemoState
                                 , _hsInitCoord = mkTokenG primary
@@ -149,7 +153,7 @@ runExpr addrs lc (eid,ex) = do
           let g1 = initIntEscrow b [primary] $
                      Map.fromList [(primary,(n,0))]
               g = (g1,IdentityG,IdentityG,IdentityG)
-          in demoRep shutdown allReady tq ts debug rid $ 
+          in demoRep shutdown allReady tq ts debug exlc $ 
                HRSettings { _hsAddrs = addrs
                           , _hsInitState = initDemoState
                           , _hsInitCoord = g

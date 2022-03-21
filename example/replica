@@ -25,9 +25,16 @@
 
   let experiments =
           Prelude.List.map Double lib.Experiment token (lib.mkDRange 50 50 24)
-          # Prelude.List.map Double lib.Experiment escrow (lib.mkDRange 50 50 24)
+        # Prelude.List.map Double lib.Experiment escrow (lib.mkDRange 50 50 24)
 
-  in  { local = { id = rid, debug, outPath = Some "./results/${rid}.csv" }
+  let grantThreshold = Some 500
+
+  in  { local =
+        { id = rid
+        , debug
+        , outPath = Some "./results/${rid}.csv"
+        , grantThreshold
+        }
       , network = toMap peers
       , experiments
       , index = 0
