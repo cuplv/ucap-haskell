@@ -23,12 +23,7 @@ library
                     , UCap.Lifter
                     , UCap.Op
                     , UCap.Replica
-                    , UCap.Replica.Debug
                     , UCap.Replica.Demo
-                    , UCap.Replica.EScript
-                    , UCap.Replica.Http
-                    , UCap.Replica.HttpDemo
-                    , UCap.Replica.MRep
                     , UCap.Replica.PDemo
                     , UCap.Replica.Script
                     , UCap.Replica.Transact
@@ -58,10 +53,6 @@ library
                     , mtl
                     , free
                     , bifunctors
-                    , http-client
-                    , http-types
-                    , wai
-                    , warp
                     , stm
                     , time
                     , bytestring
@@ -91,17 +82,3 @@ test-suite test
                     , tasty-hunit
                     , tasty-quickcheck
                     , ucap
-
-executable ucap-demo
-    default-language: Haskell2010
-    hs-source-dirs:   demo
-    main-is:          Main.hs
-    other-modules:    UCap.Demo.Config
-    build-depends:    base ^>=4.14.3.0
-                    , ucap
-                    , dhall
-                    , mtl
-                    , containers
-                    , stm
-                    , text
-                    , time
