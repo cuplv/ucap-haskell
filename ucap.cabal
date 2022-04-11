@@ -17,8 +17,10 @@ library
                     , UCap
                     , UCap.Coord
                     , UCap.Coord.Int
+                    , UCap.Coord.Map
                     , UCap.Domain
                     , UCap.Domain.Int
+                    , UCap.Domain.StaticMap
                     , UCap.Lens
                     , UCap.Lifter
                     , UCap.Op
@@ -33,7 +35,6 @@ library
     other-modules:    Lang.Rwa.Internal
                     , UCap.Coord.Classes
                     , UCap.Coord.Const
-                    , UCap.Coord.Map
                     , UCap.Coord.Static
                     , UCap.Domain.Classes
                     , UCap.Domain.Const

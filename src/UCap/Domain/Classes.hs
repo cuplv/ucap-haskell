@@ -255,6 +255,11 @@ failToEither (DidFail e) = Left e
 -- have a 'Meet' instance, but this would require a "join" definition
 -- for @c@, distinct from the multiplicative conjunction meaning of
 -- '<>' on capabilities.
+--
+-- The '<>' defined for 'Caps' combines the read-capabilties with
+-- 'meet' and the write-capabilities with '<>'.
+--
+-- The 'fmap' instance applies the function to both read and write capabilities.
 data Caps c
   = Caps { capsRead :: c
          , capsWrite :: c
