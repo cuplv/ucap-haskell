@@ -16,7 +16,7 @@ import Data.Map.Merge.Strict
 import GHC.Generics
 
 data StaticMapE k e
-  = StaticMapE (Map k e)
+  = StaticMapE { unwrapSme :: Map k e }
   deriving (Show, Eq, Ord, Generic)
 
 type Sme = StaticMapE

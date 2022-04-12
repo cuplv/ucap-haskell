@@ -17,6 +17,7 @@ library
                     , UCap
                     , UCap.Coord
                     , UCap.Coord.Int
+                    , UCap.Coord.PartMap
                     , UCap.Coord.StaticMap
                     , UCap.Domain
                     , UCap.Domain.Int

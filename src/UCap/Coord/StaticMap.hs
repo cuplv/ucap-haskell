@@ -3,7 +3,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module UCap.Coord.StaticMap where
+module UCap.Coord.StaticMap
+  ( StaticMapG (..)
+  ) where
 
 import Data.InfMap
 import UCap.Coord.Classes
