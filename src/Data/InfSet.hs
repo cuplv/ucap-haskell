@@ -7,6 +7,8 @@ module Data.InfSet
   , universal
   , fromSet
   , fromList
+  , insert
+  , delete
   , member
   , isSubsetOf
   , isEmpty
@@ -64,6 +66,14 @@ instance (Ord a) => Split (InfSet a) where
 member :: (Ord a) => a -> InfSet a -> Bool
 member i (Allow as) = Set.member i as
 member i (Block bs) = not $ Set.member i bs
+
+insert :: (Ord a) => a -> InfSet a -> InfSet a
+insert a (Allow as) = Allow (Set.insert a as)
+insert a (Block bs) = Block (Set.delete a bs)
+
+delete :: (Ord a) => a -> InfSet a -> InfSet a
+delete b (Allow as) = Allow (Set.delete b as)
+delete b (Block bs) = Block (Set.insert b bs)
 
 union :: (Ord a) => InfSet a -> InfSet a -> InfSet a
 union = (<>)

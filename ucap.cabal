@@ -20,6 +20,7 @@ library
                     , UCap.Coord.StaticMap
                     , UCap.Domain
                     , UCap.Domain.Int
+                    , UCap.Domain.PartMap
                     , UCap.Domain.StaticMap
                     , UCap.Lens
                     , UCap.Lifter
