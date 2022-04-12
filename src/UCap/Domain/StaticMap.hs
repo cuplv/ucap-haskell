@@ -11,8 +11,8 @@ import Data.Aeson
 import Data.Bifunctor
 import Data.Biapplicative
 import Data.Map (Map)
-import Data.Map.Merge.Strict
 import qualified Data.Map as Map
+import Data.Map.Merge.Strict
 import GHC.Generics
 
 data StaticMapE k e
