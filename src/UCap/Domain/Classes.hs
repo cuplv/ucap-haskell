@@ -55,6 +55,9 @@ class (Monoid e) => EffectDom e where
   type EDState e
   eFun :: e -> EDState e -> EDState e
 
+  eIsEmpty :: e -> Bool
+  eIsEmpty = const False
+
 {-| The identity effect, a synonym for 'Data.Monoid.mempty'. -}
 idE :: (Monoid e) => e
 idE = mempty
@@ -169,7 +172,8 @@ instance (Split a, Split b, Split c, Split d) => Split (a,b,c,d) where
 class (BMeet c, Split c, EffectDom (CEffect c)) => Cap c where
   type CEffect c
   mincap :: CEffect c -> c
-  mincap _ = uniC
+  mincap e | eIsEmpty e = idC
+           | otherwise = uniC
 
   undo :: CEffect c -> c
   undo _ = mempty

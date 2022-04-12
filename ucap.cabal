@@ -39,6 +39,7 @@ library
                     , UCap.Domain.Classes
                     , UCap.Domain.Const
                     , UCap.Domain.Either
+                    , UCap.Domain.Free
                     , UCap.Domain.Identity
                     , UCap.Domain.Map
                     , UCap.Domain.Num
