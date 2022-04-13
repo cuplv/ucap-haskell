@@ -99,3 +99,9 @@ instance (Ord p, Ord k, Cap c) => Cap (PartMapC p k c) where
 
 capPmc :: (Ord p, Ord k, Cap c) => (p,k) -> c -> PartMapC p k c
 capPmc k c = PartMapC mempty (IM.fromList idC [(k,c)])
+
+insPmc :: (Ord p, Ord k, Cap c) => p -> PartMapC p k c
+insPmc p = PartMapC (IM.fromList NoChange [(p,AnyChange)]) mempty
+
+noInsPmc :: (Ord p, Ord k, Cap c) => p -> PartMapC p k c
+noInsPmc p = PartMapC (IM.fromList AnyChange [(p,NoChange)]) meetId

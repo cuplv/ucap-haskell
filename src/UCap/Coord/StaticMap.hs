@@ -6,6 +6,7 @@
 
 module UCap.Coord.StaticMap
   ( StaticMapG (..)
+  , initStaticMapG
   ) where
 
 import Data.InfMap
@@ -92,3 +93,6 @@ instance (Ord k, Ord (GState g), Eq (GEffect g), CoordSys g)
     . traverse id
     . fmap (grantRequests i)
     $ m
+
+initStaticMapG :: (Ord k) => [(k,g)] -> StaticMapG k g
+initStaticMapG = StaticMapG . Map.fromList

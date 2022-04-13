@@ -5,7 +5,7 @@
 module UCap.Domain.StaticMap where
 
 import UCap.Domain.Classes
-
+import UCap.Lens
 
 import Data.Aeson
 import Data.Bifunctor
@@ -26,6 +26,9 @@ instance (Ord k, FromJSONKey k, FromJSON k, FromJSON e) => FromJSON (StaticMapE 
 type Sme = StaticMapE
 
 sme = StaticMapE
+
+toKeySme :: (Ord k) => k -> e -> StaticMapE k e
+toKeySme k e = StaticMapE (Map.singleton k e)
 
 instance (Ord k, Semigroup e) => Semigroup (StaticMapE k e) where
   StaticMapE a <> StaticMapE b = StaticMapE $ Map.unionWith (<>) a b

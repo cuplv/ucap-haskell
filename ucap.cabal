@@ -26,6 +26,8 @@ library
                     , UCap.Lens
                     , UCap.Lifter
                     , UCap.Op
+                    , UCap.Op.PartMap
+                    , UCap.Op.StaticMap
                     , UCap.Replica
                     , UCap.Replica.Demo
                     , UCap.Replica.PDemo

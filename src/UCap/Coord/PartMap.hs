@@ -103,3 +103,8 @@ instance (Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
         e = resolveCaps i cs' mge
     in bimap (fmap (PartMapG mgi)) (PartMapE . fmap ModifyE . unwrapSme) e
   grantRequests i (PartMapG a b) = PartMapG a <$> grantRequests i b
+
+emptyPartMapG :: (Ord i, Ord k) => [i] -> PartMapG i k i c
+emptyPartMapG is = PartMapG
+  (Map.fromList (map (\i -> (i,i)) is))
+  (initStaticMapG [])
