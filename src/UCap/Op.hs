@@ -35,6 +35,8 @@ module UCap.Op
   , _2ed
   , _3ed
   , _4ed
+  -- * Free operations
+  , module UCap.Op.Free
   -- * Operations for an 'Int' store
   , module UCap.Op.Int
   -- * Lifters for 'Data.Either.Either'
@@ -48,6 +50,7 @@ import UCap.Lifter
 import UCap.Op.Either
 import UCap.Op.Internal
 import UCap.Op.Map
+import UCap.Op.Free
 import UCap.Op.Int
 
 import Control.Arrow ((>>>),(<<<))

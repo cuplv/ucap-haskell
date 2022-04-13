@@ -8,6 +8,28 @@ import UCap.Domain.Classes
 import Data.Aeson
 import GHC.Generics
 
+data FreeE s
+  = FreeSet s
+  | FreeId
+  deriving (Show,Eq,Ord,Generic)
+
+instance (ToJSON s) => ToJSON (FreeE s) where
+  toEncoding = genericToEncoding defaultOptions
+instance (FromJSON s) => FromJSON (FreeE s)
+
+instance Semigroup (FreeE s) where
+  FreeId <> a = a
+  a <> FreeId = a
+  _ <> a = a
+
+instance Monoid (FreeE s) where
+  mempty = FreeId
+
+instance EffectDom (FreeE s) where
+  type EDState (FreeE s) = s
+  eFun (FreeSet s) = const s
+  eFun FreeId = id
+
 data FV
   = NoChange
   | AnyChange
