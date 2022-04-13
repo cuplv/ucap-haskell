@@ -4,6 +4,7 @@
 module UCap.Coord.Int
   ( IntEscrow
   , initIntEscrow
+  , initIntEscrow'
   ) where
 
 import UCap.Coord.Classes
@@ -155,3 +156,7 @@ initIntEscrow bf sources m = IntEscrow
   , subEscrow = DecEscrow . IncEscrow bf $
                 initEscrow sources [] (Map.map fst m)
   }
+
+initIntEscrow' :: (Ord i) => Int -> i -> (Int,Int) -> [i] -> IntEscrow i
+initIntEscrow' bf p ns others = initIntEscrow bf [p] (Map.fromList l)
+  where l = [(p,ns)] ++ map (\i -> (i, (0,0))) others
