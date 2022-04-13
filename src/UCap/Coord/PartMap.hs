@@ -1,4 +1,6 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -15,30 +17,32 @@ import UCap.Domain.Free
 import UCap.Domain.PartMap
 import UCap.Domain.StaticMap
 
+import Control.Monad (foldM)
+import Data.Aeson
 import Data.Bifunctor
 import Data.Biapplicative
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
--- import Data.Set (Set)
--- import qualified Data.Set as Set
+import GHC.Generics
 
-data PartMapG p k g
-  = PartMapG { pmgIns :: Map p (GId g)
-             , pmgMod :: StaticMapG (p,k) g
+data PartMapG p k i c
+  = PartMapG { pmgIns :: Map p i
+             , pmgMod :: StaticMapG (p,k) (TokenG i c)
              }
+  deriving (Show,Eq,Ord,Generic)
 
-deriving instance (Show p, Show k, Show g, Show (GId g)) => Show (PartMapG p k g)
-deriving instance (Eq p, Eq k, Eq g, Eq (GId g)) => Eq (PartMapG p k g)
-deriving instance (Ord p, Ord k, Ord g, Ord (GId g)) => Ord (PartMapG p k g)
-
-instance (Ord p, Ord k, Semigroup g) => Semigroup (PartMapG p k g) where
+instance (Ord i, Ord p, Ord k, Semigroup c) => Semigroup (PartMapG p k i c) where
   PartMapG im1 mm1 <> PartMapG _ mm2 =
     PartMapG im1 (mm1 <> mm2)
 
+instance (ToJSONKey p, ToJSON p, ToJSONKey k, ToJSON k, ToJSONKey i, ToJSON i, ToJSON c) => ToJSON (PartMapG p k i c) where
+  toEncoding = genericToEncoding defaultOptions
+instance (Ord p, FromJSONKey p, FromJSON p, Ord k, FromJSONKey k, FromJSON k, Ord i, FromJSONKey i, FromJSON i, FromJSON c) => FromJSON (PartMapG p k i c)
+
 localRead
-  :: (Ord p, Ord k, CoordSys g, Ord (GState g), Eq (GEffect g))
-  => GId g -> PartMapG p k g -> GCap (PartMapG p k g)
+  :: (Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
+  => i -> PartMapG p k i c -> GCap (PartMapG p k i c)
 localRead i (PartMapG im mm) =
   let mmc = case capsRead $ localCaps i mm of
               StaticMapC m -> IM.fromMap idC m
@@ -51,8 +55,8 @@ localRead i (PartMapG im mm) =
   in PartMapC imc mmc
 
 localWrite
-  :: (Ord p, Ord k, CoordSys g, Ord (GState g), Eq (GEffect g))
-  => GId g -> PartMapG p k g -> GCap (PartMapG p k g)
+  :: (Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
+  => i -> PartMapG p k i c -> GCap (PartMapG p k i c)
 localWrite i (PartMapG im mm) =
   let mmc = case capsWrite $ localCaps i mm of
               StaticMapC m -> IM.fromMap idC m
@@ -68,32 +72,32 @@ unpackCaps (Caps (PartMapC _ r) (PartMapC _ w)) =
   let (ru,rf) = IM.toMap r
       (wu,wf) = IM.toMap w
   in Caps (StaticMapC rf) (StaticMapC wf)
-  -- in IM.fromMap (Caps ru wu) $ merge
-  --      (mapMissing (\_ r -> Caps r idC))
-  --      (mapMissing (\_ w -> Caps uniC w))
-  --      (zipWithMatched (const Caps))
-  --      rf
-  --      wf
 
-instance (Ord p, Ord k, Ord (GState g), Eq (GEffect g), CoordSys g)
-  => CoordSys (PartMapG p k g) where
-  type GCap (PartMapG p k g) = PartMapC p k (GCap g)
-  type GId (PartMapG p k g) = GId g
+instance (Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
+  => CoordSys (PartMapG p k i c) where
+  type GCap (PartMapG p k i c) = PartMapC p k c
+  type GId (PartMapG p k i c) = i
+
   localCaps i g = Caps (localRead i g) (localWrite i g)
-  resolveEffect i (PartMapE me) (PartMapG mgi mge) = 
-    let (ss,es) = Map.foldlWithKey
-          (\(ss,es) k e -> case e of
-                             ConstE s -> (Map.insert k s ss, es)
-                             ModifyE e' -> (ss, Map.insert k e' es))
-          (Map.empty, Map.empty)
-          me
-        checkSets = Map.traverseWithKey
-                      (\(p,_) _ -> if Map.lookup p mgi == Just i
-                                      then Right ()
-                                      else Left uniC)
-                      ss
-        mge' = first (const idC) $ resolveEffect i (StaticMapE es) mge
-    in PartMapG <$> (const mgi <$> checkSets) <*> mge'
+
+  resolveEffect i (PartMapE me) g = foldM
+    (\(PartMapG mgi (StaticMapG mge)) ((p,k),e) -> case e of
+       ConstE s -> case Map.lookup p mgi of
+          Just i' | i == i' -> 
+            let mge' = Map.insert (p,k) (mkTokenG i) mge
+            in Right $ PartMapG mgi (StaticMapG mge')
+          Nothing -> Left idC
+       ModifyE e' ->
+         let mge' = StaticMapG <$> Map.alterF
+               (\case
+                   Just g -> bimap (capPmc (p,k)) Just $ resolveEffect i e' g
+                   Nothing -> Left (mincap (modPme (p,k) e')))
+               (p,k)
+               mge
+         in PartMapG mgi <$> mge')
+    g
+    (Map.assocs me)
+
   resolveCaps i cs (PartMapG mgi mge) =
     let cs' = unpackCaps cs
         e = resolveCaps i cs' mge

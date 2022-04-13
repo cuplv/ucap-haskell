@@ -19,6 +19,10 @@ data StaticMapE k e
   = StaticMapE { unwrapSme :: Map k e }
   deriving (Show, Eq, Ord, Generic)
 
+instance (ToJSONKey k, ToJSON k, ToJSON e) => ToJSON (StaticMapE k e) where
+  toEncoding = genericToEncoding defaultOptions
+instance (Ord k, FromJSONKey k, FromJSON k, FromJSON e) => FromJSON (StaticMapE k e)
+
 type Sme = StaticMapE
 
 sme = StaticMapE
@@ -42,6 +46,10 @@ data StaticMapC k c
   = StaticMapC (Map k c)
   | StaticMapUni
   deriving (Show, Eq, Ord, Generic)
+
+instance (ToJSONKey k, ToJSON k, ToJSON c) => ToJSON (StaticMapC k c) where
+  toEncoding = genericToEncoding defaultOptions
+instance (Ord k, FromJSONKey k, FromJSON k, FromJSON c) => FromJSON (StaticMapC k c)
 
 emptySmc :: StaticMapC k c
 emptySmc = StaticMapC Map.empty

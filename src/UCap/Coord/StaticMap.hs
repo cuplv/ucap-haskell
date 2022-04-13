@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -12,13 +13,17 @@ import UCap.Coord.Classes
 import UCap.Domain.Classes
 import UCap.Domain.StaticMap
 
+import Data.Aeson
 import Data.Bifunctor
 import Data.Biapplicative
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Merge.Strict
+import GHC.Generics
 
-data StaticMapG k g = StaticMapG (Map k g)
+data StaticMapG k g
+  = StaticMapG (Map k g)
+  deriving (Generic)
 
 deriving instance (Show k, Show g, Show (GId g)) => Show (StaticMapG k g)
 deriving instance (Eq k, Eq g, Eq (GId g)) => Eq (StaticMapG k g)
@@ -26,6 +31,10 @@ deriving instance (Ord k, Ord g, Ord (GId g)) => Ord (StaticMapG k g)
 
 instance (Ord k, Semigroup g) => Semigroup (StaticMapG k g) where
   StaticMapG a <> StaticMapG b = StaticMapG $ Map.unionWith (<>) a b
+
+instance (ToJSON k, ToJSONKey k, ToJSON g) => ToJSON (StaticMapG k g) where
+  toEncoding = genericToEncoding defaultOptions
+instance (Ord k, FromJSONKey k, FromJSON k, FromJSON g) => FromJSON (StaticMapG k g)
 
 localRead
   :: (Ord k, CoordSys g)

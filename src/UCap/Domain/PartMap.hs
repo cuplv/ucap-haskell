@@ -51,6 +51,12 @@ instance (Ord p, Ord k, EffectDom e, EDState e ~ s) => EffectDom (PartMapE p k e
     me
     ms
 
+modPme :: (p,k) -> e -> PartMapE p k e s
+modPme k e = PartMapE $ Map.singleton k (ModifyE e)
+
+insPme :: (p,k) -> s -> PartMapE p k e s
+insPme k s = PartMapE $ Map.singleton k (ConstE s)
+
 data PartMapC p k c
   = PartMapC (InfMap p FV) (InfMap (p,k) c)
   deriving (Show,Eq,Ord,Generic)
@@ -90,3 +96,6 @@ instance (Ord p, Ord k, Cap c) => Cap (PartMapC p k c) where
                 ModifyE e' -> mincap e'
                 _ -> idC)
        m)
+
+capPmc :: (Ord p, Ord k, Cap c) => (p,k) -> c -> PartMapC p k c
+capPmc k c = PartMapC mempty (IM.fromList idC [(k,c)])
