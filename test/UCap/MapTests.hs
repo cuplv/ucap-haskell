@@ -58,4 +58,16 @@ testQueue = testGroup "Queue"
   ,testCase "PartMap 4" $
      execWith (fullCaps :: Caps (PartMapC String Int (FreeC (FreeE String)))) (Map.empty) (pure (1,"foo") >>> insPmeOp "a")
      @?= Just (Identity (fullCaps, insPme ("a",1) "foo", ("a",1)))
+  ,testCase "StaticMap GR" $
+     grantRequests "a" (initStaticMapG [] :: StaticMapG String (TokenG String (IdentityC (IdentityE ()))))
+     @?= Nothing
+  ,testCase "StaticMap GR 2" $
+     grantRequests "a" (initStaticMapG [("foo",mkTokenG "asdf")] :: StaticMapG String (TokenG String (IdentityC (IdentityE ()))))
+     @?= Nothing
+  -- ,testCase "StaticMap GR 2" $
+  --    grantRequests "asdf" (initStaticMapG [("foo",TokenG $ requestToken "qwerty" $ mkToken "asdf")] :: StaticMapG String (TokenG String (IdentityC (IdentityE ()))))
+  --    @?= Nothing
+  -- ,testCase "StaticMap GR 2.1" $
+  --    grantRequests "asdf" (TokenG $ requestToken "qwerty" $ mkToken "asdf" :: TokenG String IntC)
+  --    @?= Nothing
   ]

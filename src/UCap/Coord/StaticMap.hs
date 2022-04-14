@@ -88,11 +88,31 @@ instance (Ord k, Ord (GState g), Eq (GEffect g), CoordSys g)
           gm
     in failToEither $ bipure (fmap StaticMapG . traverse id) StaticMapE
                       <<*>> traverseBia id m
-  grantRequests i (StaticMapG m) =
-    fmap StaticMapG
-    . traverse id
-    . fmap (grantRequests i)
-    $ m
+  grantRequests i (StaticMapG m) 
+    | null m = Nothing
+    | otherwise =
+      let newm = Map.map (\g -> case grantRequests i g of
+                                  Just g' -> Right g'
+                                  Nothing -> Left g)
+                         m
+          anyNew = Map.filter (\a -> case a of
+                                       Right _ -> True
+                                       Left _ -> False)
+                              newm
+          flatm = Map.map (\a -> case a of
+                                   Right g -> g
+                                   Left g -> g)
+                          newm
+      in if null anyNew
+            then Nothing
+            else Just $ StaticMapG flatm
+    --  otherwise = fmap StaticMapG
+    --               . traverse id
+    --               . fmap (g -> case grantRequests i g of
+    --                              Just g' -> Right g'
+    --                              Nothing -> Left y)
+    --               $ m
+    
 
 initStaticMapG :: (Ord k) => [(k,g)] -> StaticMapG k g
 initStaticMapG = StaticMapG . Map.fromList
