@@ -29,8 +29,8 @@ library
                     , UCap.Op.PartMap
                     , UCap.Op.StaticMap
                     , UCap.Replica
-                    , UCap.Replica.Demo
-                    , UCap.Replica.PDemo
+                    -- , UCap.Replica.Demo
+                    -- , UCap.Replica.PDemo
                     , UCap.Replica.Script
                     , UCap.Replica.Transact
                     , UCap.Replica.Types

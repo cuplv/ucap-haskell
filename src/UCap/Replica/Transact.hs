@@ -1,8 +1,5 @@
 module UCap.Replica.Transact
-  ( transactSimple
-  , transact
-  , transactMany
-  , transactMany_
+  ( transact
   , grantRequests'
   , acceptGrants'
   ) where
@@ -13,6 +10,7 @@ import UCap.Lens
 import UCap.Op
 import UCap.Replica.Script
 
+import Control.Monad.Except
 import Data.Maybe (fromJust)
 
 {-| Check if the replica has the given 'Caps'.  If so, return a state
@@ -32,57 +30,66 @@ execCaps rid g s cs =
     Left (Just g') -> Left g'
     Left Nothing -> error "No way to request the needed caps."
 
-{-| Compile an operation into a replica script.  If capabilities are not
-  sufficient, @'Left' g@ is returned, where @g@ is an updated
-  coordination system in which requests for the capabilities have been
-  made. -}
-transactSimple
-  :: (CoordSys g, Monad m)
-  => Op (GCap g) m () a
-  -> ScriptT g m (Either g a)
-transactSimple t = do
-  let caps = capsReq t
-  rid <- getReplicaId
-  ctx <- readState
-  case resolveCaps rid caps (ctx^.rsCoord) of
-    Right sim -> do
-      -- We've already checked the capabilities, so we feed 'fullCaps'
-      -- to execWith.  I should define a version of execWith that
-      -- doesn't bother with capabilities, since the CoordSys does all
-      -- the reasoning about them.
-      let s = eFun sim $ ctx^.rsStore
-      (_,e,a) <- liftScript . fromJust $ execWith fullCaps s t
-      let g' = case resolveEffect rid e (ctx^.rsCoord) of
-                 Right g' -> g'
-                 Left _ -> error "Write error."
-      -- emitEffect e
-      -- setCoord g'
-      writeGE g' e
-      return (Right a)
-    Left (Just g') -> return (Left g')
-    Left Nothing -> error "No way to request the needed caps."
+-- {-| Compile an operation into a replica script.  If capabilities are not
+--   sufficient, @'Left' g@ is returned, where @g@ is an updated
+--   coordination system in which requests for the capabilities have been
+--   made. -}
+-- transactSimple
+--   :: (CoordSys g, Monad m)
+--   => Op (GCap g) m () a
+--   -> ScriptT g m (Either g a)
+-- transactSimple t = do
+--   let caps = capsReq t
+--   rid <- getReplicaId
+--   ctx <- readState
+--   case resolveCaps rid caps (ctx^.rsCoord) of
+--     Right sim -> do
+--       -- We've already checked the capabilities, so we feed 'fullCaps'
+--       -- to execWith.  I should define a version of execWith that
+--       -- doesn't bother with capabilities, since the CoordSys does all
+--       -- the reasoning about them.
+--       let s = eFun sim $ ctx^.rsStore
+--       (_,e,a) <- liftScript . fromJust $ execWith fullCaps s t
+--       let g' = case resolveEffect rid e (ctx^.rsCoord) of
+--                  Right g' -> g'
+--                  Left _ -> error "Write error."
+--       -- emitEffect e
+--       -- setCoord g'
+--       writeGE g' e
+--       return (Right a)
+--     Left (Just g') -> return (Left g')
+--     Left Nothing -> error "No way to request the needed caps."
 
 runUpdate
   :: (CoordSys g, Monad m)
-  => Op (GCap g) m () a
+  => Op (GCap g) (ExceptT () m) () a
   -> GState g
-  -> ScriptT g m a
+  -> ScriptT g m (Maybe a)
 runUpdate t s = do
   rid <- getReplicaId
-  (_,e,a) <- liftScript . fromJust $ execWith fullCaps s t
-  g <- view rsCoord <$> readState
-  let g' = case resolveEffect rid e g of
-             Right g' -> g'
-             Left _ -> error "Write error."
-  -- emitEffect e
-  -- setCoord g'
-  writeGE g' e
-  return a
+  rslt <- liftScript . runExceptT . fromJust $ execWith fullCaps s t
+  case rslt of
+    Right (_,e,a) -> do
+      g <- view rsCoord <$> readState
+      let g' = case resolveEffect rid e g of
+                 Right g' -> g'
+                 Left _ -> error "Write error."
+      writeGE g' e
+      return $ Just a
+    Left () -> return Nothing
+  -- g <- view rsCoord <$> readState
+  -- let g' = case resolveEffect rid e g of
+  --            Right g' -> g'
+  --            Left _ -> error "Write error."
+  -- -- emitEffect e
+  -- -- setCoord g'
+  -- writeGE g' e
+  -- return a
 
 transact
   :: (CoordSys g, Monad m)
-  => Op (GCap g) m () a
-  -> ScriptT g m (Block' (ScriptT g m) a)
+  => Op (GCap g) (ExceptT () m) () a
+  -> ScriptT g m (Block' (ScriptT g m) (Maybe a))
 transact t = do
   rid <- getReplicaId
   ctx <- readState
@@ -100,31 +107,31 @@ transact t = do
           Right s -> nonBlock $ runUpdate t s
           Left _ -> notReady
 
-transactMany
-  :: (CoordSys g, Monad m)
-  => [Op (GCap g) m () a]
-  -> ScriptT g m [a]
-transactMany [] = return []
-transactMany (o1:os) = do
-  complete1 <- transact o1
-  await . firstOf $
-    [ grantRequests' `andThen_` transactMany (o1:os)
-    , acceptGrants' `andThen_` transactMany (o1:os)
-    , complete1 `andThen` (\a -> (a :) <$> transactMany os)
-    ]
+-- transactMany
+--   :: (CoordSys g, Monad m)
+--   => [Op (GCap g) m () a]
+--   -> ScriptT g m [a]
+-- transactMany [] = return []
+-- transactMany (o1:os) = do
+--   complete1 <- transact o1
+--   await . firstOf $
+--     [ grantRequests' `andThen_` transactMany (o1:os)
+--     , acceptGrants' `andThen_` transactMany (o1:os)
+--     , complete1 `andThen` (\a -> (a :) <$> transactMany os)
+--     ]
 
-transactMany_
-  :: (CoordSys g, Monad m)
-  => [Op (GCap g) m () a]
-  -> ScriptT g m ()
-transactMany_ [] = return ()
-transactMany_ (o1:os) = do
-  complete1 <- transact o1
-  await . firstOf $
-    [ grantRequests' `andThen_` transactMany_ (o1:os)
-    , acceptGrants' `andThen_` transactMany_ (o1:os)
-    , complete1 `andThen_` transactMany_ os
-    ]
+-- transactMany_
+--   :: (CoordSys g, Monad m)
+--   => [Op (GCap g) m () a]
+--   -> ScriptT g m ()
+-- transactMany_ [] = return ()
+-- transactMany_ (o1:os) = do
+--   complete1 <- transact o1
+--   await . firstOf $
+--     [ grantRequests' `andThen_` transactMany_ (o1:os)
+--     , acceptGrants' `andThen_` transactMany_ (o1:os)
+--     , complete1 `andThen_` transactMany_ os
+--     ]
 
 grantRequests' :: (CoordSys g, Monad m) => Block' (ScriptT g m) ()
 grantRequests' = do
