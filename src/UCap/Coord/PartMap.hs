@@ -90,7 +90,7 @@ instance (Eq c, Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
        ModifyE e' ->
          let mge' = StaticMapG <$> Map.alterF
                (\case
-                   Just g -> bimap (capPmc (p,k)) Just $ resolveEffect i e' g
+                   Just g -> bimap (capPmcW (p,k)) Just $ resolveEffect i e' g
                    Nothing -> Left (mincap (modPme (p,k) e')))
                (p,k)
                mge

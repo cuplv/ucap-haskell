@@ -97,8 +97,11 @@ instance (Eq c, Ord p, Ord k, Cap c) => Cap (PartMapC p k c) where
                 _ -> idC)
        m)
 
-capPmc :: (Ord p, Ord k, Cap c) => (p,k) -> c -> PartMapC p k c
-capPmc k c = PartMapC mempty (IM.fromList idC [(k,c)])
+capPmcR :: (Ord p, Ord k, Cap c) => (p,k) -> c -> PartMapC p k c
+capPmcR k c = PartMapC meetId (IM.fromList uniC [(k,c)])
+
+capPmcW :: (Ord p, Ord k, Cap c) => (p,k) -> c -> PartMapC p k c
+capPmcW k c = PartMapC mempty (IM.fromList idC [(k,c)])
 
 insPmc :: (Ord p, Ord k, Cap c) => p -> PartMapC p k c
 insPmc p = PartMapC (IM.fromList NoChange [(p,AnyChange)]) mempty

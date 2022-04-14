@@ -98,6 +98,7 @@ testQueue = testGroup "Queue"
   ,testCase "PartMap merge 2" $
      let g0 = emptyPartMapG [1,2] :: PartMapG Int String Int (FreeC (FreeE String))
          Right g1 = resolveEffect 1 (insPme (1,"x") "foo") g0
-         Right g2 = resolveEffect 2 (insPme (2,"x") "foo") g1
-     in g2 <> g1 @?= g2
+         Right g2 = resolveEffect 2 (insPme (2,"y") "foo") g1
+         Right g3 = resolveEffect 2 (insPme (2,"y") "foo") g0
+     in (g1 <> g3, g3 <> g1) @?= (g2,g2)
   ]

@@ -17,8 +17,8 @@ keyPLf
   -> Lifter (PartMapC p k c) c
 keyPLf k = Lifter
   (^. at k)
-  (\rc -> uniC `meet` capPmc k rc)
-  (\wc -> idC <> capPmc k wc)
+  (\rc -> capPmcR k rc)
+  (\wc -> capPmcW k wc)
   (modPme k)
 
 {-| Insert into the map, in a static partition, using a dynamic key and
