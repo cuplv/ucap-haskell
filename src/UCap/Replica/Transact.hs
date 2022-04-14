@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module UCap.Replica.Transact
   ( transact
   , grantRequests'
@@ -18,7 +20,7 @@ import Data.Maybe (fromJust)
   an updated 'CoordSys' in which those capabilities have been
   requested. -}
 execCaps
-  :: (CoordSys g)
+  :: (CoordSys g, Show (GCap g), Show g, Show (GId g))
   => GId g
   -> g
   -> GState g
@@ -28,37 +30,10 @@ execCaps rid g s cs =
   case resolveCaps rid cs g of
     Right sim -> Right $ eFun sim s
     Left (Just g') -> Left g'
-    Left Nothing -> error "No way to request the needed caps."
-
--- {-| Compile an operation into a replica script.  If capabilities are not
---   sufficient, @'Left' g@ is returned, where @g@ is an updated
---   coordination system in which requests for the capabilities have been
---   made. -}
--- transactSimple
---   :: (CoordSys g, Monad m)
---   => Op (GCap g) m () a
---   -> ScriptT g m (Either g a)
--- transactSimple t = do
---   let caps = capsReq t
---   rid <- getReplicaId
---   ctx <- readState
---   case resolveCaps rid caps (ctx^.rsCoord) of
---     Right sim -> do
---       -- We've already checked the capabilities, so we feed 'fullCaps'
---       -- to execWith.  I should define a version of execWith that
---       -- doesn't bother with capabilities, since the CoordSys does all
---       -- the reasoning about them.
---       let s = eFun sim $ ctx^.rsStore
---       (_,e,a) <- liftScript . fromJust $ execWith fullCaps s t
---       let g' = case resolveEffect rid e (ctx^.rsCoord) of
---                  Right g' -> g'
---                  Left _ -> error "Write error."
---       -- emitEffect e
---       -- setCoord g'
---       writeGE g' e
---       return (Right a)
---     Left (Just g') -> return (Left g')
---     Left Nothing -> error "No way to request the needed caps."
+    Left Nothing -> error $
+      "No way for " ++ show rid
+      ++ "to request the needed caps " ++ show cs
+      ++ "from coord " ++ show g
 
 runUpdate
   :: (CoordSys g, Monad m)
@@ -77,17 +52,9 @@ runUpdate t s = do
       writeGE g' e
       return $ Just a
     Left () -> return Nothing
-  -- g <- view rsCoord <$> readState
-  -- let g' = case resolveEffect rid e g of
-  --            Right g' -> g'
-  --            Left _ -> error "Write error."
-  -- -- emitEffect e
-  -- -- setCoord g'
-  -- writeGE g' e
-  -- return a
 
 transact
-  :: (CoordSys g, Monad m)
+  :: (CoordSys g, Monad m, Show (GCap g), Show g, Show (GId g))
   => Op (GCap g) (ExceptT () m) () a
   -> ScriptT g m (Block' (ScriptT g m) (Maybe a))
 transact t = do
@@ -106,32 +73,6 @@ transact t = do
         case r of
           Right s -> nonBlock $ runUpdate t s
           Left _ -> notReady
-
--- transactMany
---   :: (CoordSys g, Monad m)
---   => [Op (GCap g) m () a]
---   -> ScriptT g m [a]
--- transactMany [] = return []
--- transactMany (o1:os) = do
---   complete1 <- transact o1
---   await . firstOf $
---     [ grantRequests' `andThen_` transactMany (o1:os)
---     , acceptGrants' `andThen_` transactMany (o1:os)
---     , complete1 `andThen` (\a -> (a :) <$> transactMany os)
---     ]
-
--- transactMany_
---   :: (CoordSys g, Monad m)
---   => [Op (GCap g) m () a]
---   -> ScriptT g m ()
--- transactMany_ [] = return ()
--- transactMany_ (o1:os) = do
---   complete1 <- transact o1
---   await . firstOf $
---     [ grantRequests' `andThen_` transactMany_ (o1:os)
---     , acceptGrants' `andThen_` transactMany_ (o1:os)
---     , complete1 `andThen_` transactMany_ os
---     ]
 
 grantRequests' :: (CoordSys g, Monad m) => Block' (ScriptT g m) ()
 grantRequests' = do
