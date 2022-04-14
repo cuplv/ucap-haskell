@@ -12,7 +12,7 @@ import Control.Arrow
 
 {-| Operate on a particular key. -}
 keyPLf
-  :: (Cap c, Ord p, Ord k, Ord (CState c))
+  :: (Cap c, Eq c, Ord p, Ord k, Ord (CState c))
   => (p,k)
   -> Lifter (PartMapC p k c) c
 keyPLf k = Lifter
@@ -24,7 +24,7 @@ keyPLf k = Lifter
 {-| Insert into the map, in a static partition, using a dynamic key and
   value. -}
 insPmeOp
-  :: (Ord p, Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
+  :: (Eq c, Ord p, Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
   => p
   -> Op (PartMapC p k c) m (k, CState c) (p,k)
 insPmeOp p = mkOp

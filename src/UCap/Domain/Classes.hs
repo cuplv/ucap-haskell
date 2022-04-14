@@ -268,6 +268,7 @@ data Caps c
   = Caps { capsRead :: c
          , capsWrite :: c
          }
+  deriving (Show,Eq,Ord)
 
 instance (Meet c, Semigroup c) => Semigroup (Caps c) where
   Caps r1 w1 <> Caps r2 w2 = Caps (r1 `meet` r2) (w1 <> w2)

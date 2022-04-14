@@ -17,6 +17,7 @@ module Data.InfMap
   , toList
   , toMap
   , Data.InfMap.at
+  , normalize
   ) where
 
 import UCap.Domain.Classes
@@ -35,7 +36,13 @@ data InfMap k v =
   InfMap { baseVal :: v
          , otherVals :: Map k v
          }
-  deriving (Show,Eq,Ord,Generic)
+  deriving (Show,Ord,Generic)
+
+instance (Ord k, Eq v) => Eq (InfMap k v) where
+  a == b = 
+    let InfMap bv1 m1 = normalize a
+        InfMap bv2 m2 = normalize b
+    in bv1 == bv2 && m1 == m2
 
 instance (ToJSON k, ToJSONKey k, ToJSON v) => ToJSON (InfMap k v)
 instance (Ord k, FromJSON k, FromJSONKey k, FromJSON v) => FromJSON (InfMap k v)
@@ -46,15 +53,15 @@ instance (Ord k, Semigroup v) => Semigroup (InfMap k v) where
 instance (Ord k, Monoid v) => Monoid (InfMap k v) where
   mempty = uniform mempty
 
-instance (Ord k, Meet v) => Meet (InfMap k v) where
+instance (Ord k, Meet v, Eq v) => Meet (InfMap k v) where
   meet = unionWith meet
-  (<=?) = compareWith (<=?)
+  a <=? b = compareWith (<=?) (normalize a) (normalize b)
 
-instance (Ord k, BMeet v) => BMeet (InfMap k v) where
+instance (Ord k, BMeet v, Eq v) => BMeet (InfMap k v) where
   meetId = uniform meetId
 
-instance (Ord k, Split v) => Split (InfMap k v) where
-  split a b = failToEither $ unionWithBia splitWF a b
+instance (Eq v, Ord k, Split v) => Split (InfMap k v) where
+  split a b = bimap normalize normalize $ failToEither $ unionWithBia splitWF a b
 
 uniform :: v -> InfMap k v
 uniform v = InfMap v Map.empty
@@ -157,3 +164,15 @@ at :: (Ord k) => k -> Lens' (InfMap k v) v
 at k = lens get set
   where get = Data.InfMap.lookup k
         set s b = insert k b s
+
+{-| Delete any map entries with values equal to the base value.  This
+  minimizes the representation size without changing the lookup
+  values.
+
+  'normalize' is applied by default as part of 'split', '==', and
+  '<=?'.  It imposes an 'Eq' constraint on the value type @v@ that is
+  a bit inconvenient, and so it is not automatically applied during
+  'insert', 'union', etc.
+-}
+normalize :: (Eq v, Ord k) => InfMap k v -> InfMap k v
+normalize (InfMap v0 m) = InfMap v0 $ Map.filter (/= v0) m

@@ -9,7 +9,7 @@ import UCap.Lens
 import UCap.Op.Internal
 
 {-| Operate on a particular key. -}
-keyLf :: (Cap c, Ord k, Ord (CState c)) => k -> Lifter (MapC' k c) c
+keyLf :: (Eq c, Cap c, Ord k, Ord (CState c)) => k -> Lifter (MapC' k c) c
 keyLf k = Lifter
   (^. at k)
   (meetTo $ atMapC k)
@@ -18,7 +18,7 @@ keyLf k = Lifter
 
 {-| Insert a dynamic key-value pair into the map. -}
 insertOp
-  :: (Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
+  :: (Eq c, Applicative m, Cap c, Ord k, Ord (CState c), Eq (CEffect c))
   => Op (MapC' k c) m (k,CState c) k
 insertOp = mkOp
   insertAny

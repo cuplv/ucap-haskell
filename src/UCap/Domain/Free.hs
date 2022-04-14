@@ -5,6 +5,7 @@ module UCap.Domain.Free where
 
 import UCap.Domain.Classes
 
+import Data.Bifunctor
 import Data.Aeson
 import GHC.Generics
 
@@ -58,7 +59,9 @@ instance Meet FV where
 instance BMeet FV where
   meetId = AnyChange
 
-instance Split FV
+instance Split FV where
+  NoChange `split` AnyChange = Left AnyChange
+  a `split` b = Right a
 
 data FreeC e
   = FreeC { freeC :: FV }
@@ -82,7 +85,8 @@ instance Meet (FreeC e) where
 instance BMeet (FreeC e) where
   meetId = FreeC meetId
 
-instance Split (FreeC e)
+instance Split (FreeC e) where
+  FreeC a `split` FreeC b = bimap FreeC FreeC $ split a b
 
 instance (EffectDom e, Eq e) => Cap (FreeC e) where
   type CEffect (FreeC e) = e

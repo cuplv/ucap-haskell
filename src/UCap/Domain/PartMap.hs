@@ -71,18 +71,18 @@ instance (Ord p, Ord k, Semigroup c) => Semigroup (PartMapC p k c) where
 instance (Ord p, Ord k, Monoid c) => Monoid (PartMapC p k c) where
   mempty = PartMapC mempty mempty
 
-instance (Ord p, Ord k, Meet c) => Meet (PartMapC p k c) where
+instance (Ord p, Ord k, Meet c, Eq c) => Meet (PartMapC p k c) where
   PartMapC p1 m1 `meet` PartMapC p2 m2 = PartMapC (meet p1 p2) (meet m1 m2)
   PartMapC p1 m1 <=? PartMapC p2 m2 = p1 <=? p2 && m1 <=? m2
 
-instance (Ord p, Ord k, BMeet c) => BMeet (PartMapC p k c) where
+instance (Ord p, Ord k, BMeet c, Eq c) => BMeet (PartMapC p k c) where
   meetId = PartMapC meetId meetId
 
-instance (Ord p, Ord k, Split c) => Split (PartMapC p k c) where
+instance (Eq c, Ord p, Ord k, Split c) => Split (PartMapC p k c) where
   PartMapC p1 m1 `split` PartMapC p2 m2 = failToEither $
     PartMapC <<$$>> splitWF p1 p2 <<*>> splitWF m1 m2
 
-instance (Ord p, Ord k, Cap c) => Cap (PartMapC p k c) where
+instance (Eq c, Ord p, Ord k, Cap c) => Cap (PartMapC p k c) where
   type CEffect (PartMapC p k c) = PartMapE' p k (CEffect c)
   mincap (PartMapE m) = PartMapC
     (IM.fromMap idC $ Map.foldlWithKey
@@ -103,5 +103,5 @@ capPmc k c = PartMapC mempty (IM.fromList idC [(k,c)])
 insPmc :: (Ord p, Ord k, Cap c) => p -> PartMapC p k c
 insPmc p = PartMapC (IM.fromList NoChange [(p,AnyChange)]) mempty
 
-noInsPmc :: (Ord p, Ord k, Cap c) => p -> PartMapC p k c
+noInsPmc :: (Ord p, Ord k, Cap c, Eq c) => p -> PartMapC p k c
 noInsPmc p = PartMapC (IM.fromList AnyChange [(p,NoChange)]) meetId

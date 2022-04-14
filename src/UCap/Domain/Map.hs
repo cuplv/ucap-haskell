@@ -119,7 +119,7 @@ data MapC k c s
   = MapC { _unMapC :: InfMap k (KeyC c s) }
   deriving (Show,Eq,Ord,Generic)
 
-normMapC :: (Ord k, Ord s, BMeet c) => MapC k c s -> MapC k c s
+normMapC :: (Eq c, Ord k, Ord s, BMeet c) => MapC k c s -> MapC k c s
 normMapC c@(MapC (InfMap bv vs)) | uniC <=? bv = uniC
                                  | otherwise = c
 
@@ -134,14 +134,14 @@ instance (Ord k, Ord s, Semigroup c) => Semigroup (MapC k c s) where
 instance (Ord k, Ord s, Monoid c) => Monoid (MapC k c s) where
   mempty = MapC mempty
 
-instance (Ord k, Ord s, Meet c) => Meet (MapC k c s) where
+instance (Ord k, Ord s, Meet c, Eq c) => Meet (MapC k c s) where
   meet (MapC m1) (MapC m2) = MapC (meet m1 m2)
   MapC m1 <=? MapC m2 = m1 <=? m2
 
-instance (Ord k, Ord s, BMeet c) => BMeet (MapC k c s) where
+instance (Ord k, Ord s, BMeet c, Eq c) => BMeet (MapC k c s) where
   meetId = MapC meetId
 
-instance (Ord k, Ord s, BMeet c, Split c) => Split (MapC k c s) where
+instance (Eq c, Ord k, Ord s, BMeet c, Split c) => Split (MapC k c s) where
   split (MapC m1) (MapC m2) = failToEither $
     (normMapC . MapC) <<$$>> splitWF m1 m2
 
@@ -149,6 +149,7 @@ instance
   ( Ord k
   , Ord s
   , Cap c
+  , Eq c
   , CState c ~ s
   , Eq (CEffect c)
   ) => Cap (MapC k c s) where

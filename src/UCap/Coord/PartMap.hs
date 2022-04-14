@@ -73,7 +73,7 @@ unpackCaps (Caps (PartMapC _ r) (PartMapC _ w)) =
       (wu,wf) = IM.toMap w
   in Caps (StaticMapC rf) (StaticMapC wf)
 
-instance (Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
+instance (Eq c, Ord i, Ord p, Ord k, Cap c, Ord (CState c), Eq (CEffect c))
   => CoordSys (PartMapG p k i c) where
   type GCap (PartMapG p k i c) = PartMapC p k c
   type GId (PartMapG p k i c) = i
