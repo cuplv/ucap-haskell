@@ -230,6 +230,8 @@ data EscrowIntRequest i
                      }
   deriving (Show,Eq,Ord,Generic)
 
+makeLenses ''EscrowIntRequest
+
 instance (ToJSON i) => ToJSON (EscrowIntRequest i)
 instance (FromJSON i) => FromJSON (EscrowIntRequest i)
 
@@ -297,6 +299,18 @@ escrowUnowned i p = escrowTotal p - escrowOwned i p
 escrowTotal :: (Ord i) => EscrowIntPool i -> Int
 escrowTotal p = sum $ map (\i -> escrowOwned i $ escrowAccept i p) (Map.keys (p^.epAccounts))
 
+currentlyRequested :: (Ord i) => i -> EscrowIntPool i -> Int
+currentlyRequested i p =
+  let reqs = 
+        map (view eprAmount)
+        . filter (\r -> view eprAsker r == i)
+        . concat
+        . map (mwPeekAll . view epaRequests) 
+        . Map.elems 
+        $ (p ^. epAccounts)
+  in foldr (+) 0 reqs
+
+
 escrowUse
   :: (Ord i)
   => i
@@ -328,14 +342,19 @@ escrowRequest i (i2,amt) =
 
 escrowRequest'
   :: (Ord i)
-  => i
+  => Bool
+  -> i
   -> Int
   -> EscrowIntPool i
   -> Maybe (EscrowIntPool i)
-escrowRequest' i amt p =
-  case p ^. epSources of
-    i2 : _ -> Just $ escrowRequest i (i2,amt) p
-    [] -> Nothing
+escrowRequest' limReqs i amt p =
+  let current = currentlyRequested i p
+  in if limReqs && current < amt
+        then case p ^. epSources of
+               i2 : _ -> Just $ escrowRequest i (i2,amt) p
+               [] -> Nothing
+        else Nothing
+
 
 escrowTransfer
   :: (Ord i)

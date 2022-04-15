@@ -20,7 +20,8 @@ import qualified Data.Map as Map
 import GHC.Generics
 
 data IncEscrow i
-  = IncEscrow { ieBufferFactor :: Int
+  = IncEscrow { ieLimitRequests :: Bool
+              , ieBufferFactor :: Int
               , iePool :: EscrowIntPool i
               }
   deriving (Show,Eq,Ord,Generic)
@@ -29,12 +30,12 @@ instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IncEscrow i)
 instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IncEscrow i)
 
 instance (Ord i) => Semigroup (IncEscrow i) where
-  IncEscrow bf a <> IncEscrow _ b = IncEscrow bf (a <> b)
+  IncEscrow lr bf a <> IncEscrow _ _ b = IncEscrow lr bf (a <> b)
 
 instance (Ord i) => CoordSys (IncEscrow i) where
   type GCap (IncEscrow i) = IncC
   type GId (IncEscrow i) = i
-  resolveCaps i cs (IncEscrow bf g) =
+  resolveCaps i cs (IncEscrow lr bf g) =
     case incBound . capsWrite $ cs of
       Just wn | wn <= owned -> 
                 case incBound . capsRead $ cs of
@@ -42,23 +43,23 @@ instance (Ord i) => CoordSys (IncEscrow i) where
                   Nothing -> Right $ idE
               | otherwise ->
                 let amt = (wn - owned) * bf -- overrequest by buffer-factor
-                in Left $ IncEscrow bf <$> escrowRequest' i amt g
+                in Left $ IncEscrow lr bf <$> escrowRequest' lr i amt g
       Nothing -> Left Nothing
     where owned = escrowOwned i g
           unowned = escrowUnowned i g
-  resolveEffect i e (IncEscrow bf g) = bimap incC (IncEscrow bf) $
+  resolveEffect i e (IncEscrow lr bf g) = bimap incC (IncEscrow lr bf) $
     escrowUse i (intOffset e) g
-  localCaps i (IncEscrow _ g) =
+  localCaps i (IncEscrow _ _ g) =
     incC <$> Caps { capsRead = escrowUnowned i g
                   , capsWrite = escrowOwned i g
                   }
-  undoEffect i e (IncEscrow bf g) =
-    IncEscrow bf $ escrowAdd i (intOffset e) g
-  grantRequests i (IncEscrow bf g) = IncEscrow bf <$> escrowHandleReqs i g
-  acceptGrants i (IncEscrow bf g) =
+  undoEffect i e (IncEscrow lr bf g) =
+    IncEscrow lr bf $ escrowAdd i (intOffset e) g
+  grantRequests i (IncEscrow lr bf g) = IncEscrow lr bf <$> escrowHandleReqs i g
+  acceptGrants i (IncEscrow lr bf g) =
     let g' = escrowAccept i g
     in if g /= g'
-          then Just $ IncEscrow bf g'
+          then Just $ IncEscrow lr bf g'
           else Nothing
 
 data DecEscrow i
@@ -93,7 +94,7 @@ instance (Ord i, ToJSON i, ToJSONKey i) => ToJSON (IntEscrow i)
 instance (Ord i, FromJSON i, FromJSONKey i) => FromJSON (IntEscrow i)
 
 instance (Ord i, Show i) => Show (IntEscrow i) where
-  show e@(IntEscrow (IncEscrow _ a) (DecEscrow (IncEscrow _ s))) =
+  show e@(IntEscrow (IncEscrow _ _ a) (DecEscrow (IncEscrow _ _ s))) =
     let ks = nub $ escrowOwners a ++ escrowOwners s
         caps = map (\k -> (k,capsWrite $ localCaps k e)) ks
     in show caps
@@ -145,18 +146,19 @@ instance (Ord i) => CoordSys (IntEscrow i) where
 -}
 initIntEscrow
   :: (Ord i)
-  => Int -- ^ Buffer factor
+  => Bool -- ^ Limit requests
+  -> Int -- ^ Buffer factor
   -> [i] -- ^ Source peers
   -> Map i (Int,Int) -- ^ Initial holdings
   -> IntEscrow i
-initIntEscrow 0 _ _ = error "Buffer factor is 0, must be >= 1"
-initIntEscrow bf sources m = IntEscrow
-  { addEscrow = IncEscrow bf $
+initIntEscrow _ 0 _ _ = error "Buffer factor is 0, must be >= 1"
+initIntEscrow lr bf sources m = IntEscrow
+  { addEscrow = IncEscrow lr bf $
                 initEscrow sources [] (Map.map snd m)
-  , subEscrow = DecEscrow . IncEscrow bf $
+  , subEscrow = DecEscrow . IncEscrow lr bf $
                 initEscrow sources [] (Map.map fst m)
   }
 
-initIntEscrow' :: (Ord i) => Int -> i -> (Int,Int) -> [i] -> IntEscrow i
-initIntEscrow' bf p ns others = initIntEscrow bf [p] (Map.fromList l)
+initIntEscrow' :: (Ord i) => Bool -> Int -> i -> (Int,Int) -> [i] -> IntEscrow i
+initIntEscrow' lr bf p ns others = initIntEscrow lr bf [p] (Map.fromList l)
   where l = [(p,ns)] ++ map (\i -> (i, (0,0))) others
