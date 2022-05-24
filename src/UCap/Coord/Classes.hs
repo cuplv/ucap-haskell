@@ -353,7 +353,7 @@ escrowRequest' limReqs i amt p =
         then case p ^. epSources of
                i2 : _ -> Just $ escrowRequest i (i2,amt) p
                [] -> Nothing
-        else Nothing
+        else Just p
 
 
 escrowTransfer
