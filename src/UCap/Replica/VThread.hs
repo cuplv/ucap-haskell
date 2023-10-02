@@ -69,7 +69,7 @@ instance (Ord i) => IsKV (VThread i d) where
 
 instance (Monad m, Ord i) => Dag (VThread i d) m where
   descendant v i1 i2 = return $ precedesE v i1 i2
-  parents i t@ (VThread m) = return $ toList . fst <$> lookupEvent i t
+  parents i t@(VThread m) = return $ toList . fst <$> lookupEvent i t
   payload i t = return $ snd <$> lookupEvent i t
   ends t@(VThread m) = narrow t $ f <$> Map.assocs m
     where f (i,(_,es)) = (i, length es - 1)

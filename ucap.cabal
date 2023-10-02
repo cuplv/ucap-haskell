@@ -53,7 +53,7 @@ library
                     , UCap.Op.Num
                     , UCap.Op.Either
                     , UCap.Op.Map
-    build-depends:    base ^>=4.14.3.0
+    build-depends:    base ^>=4.16.4.0
                     , containers
                     , aeson
                     , microlens-platform
@@ -82,7 +82,7 @@ test-suite test
                     -- , UCap.Replica.PDemoTests
                     , UCap.Replica.VClockTests
                     , UCap.Replica.VThreadTests
-    build-depends:    base ^>=4.14.3.0
+    build-depends:    base ^>=4.16.4.0
                     , containers
                     , mtl
                     , tasty
